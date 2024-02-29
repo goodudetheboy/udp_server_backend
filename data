@@ -1,0 +1,53 @@
+00000042 # unique packet id
+
+00000000 # total checksums processed
+
+11bc # multibyte repeating xor key
+001d # of checksums
+
+c3d42976 #RSA 512 SHA-256 XOR'd Cyclic Checksum CRC32 DWORDS
+bdf5c210
+20327585
+d2c0da5d
+1bb8450b
+5ac2bddb
+e60c551f
+8e7cd36d
+4b1e609b
+4d9a5a30
+7ff5621d
+67f46e6d
+a0e79505
+3bc42c01
+4eeae962
+d3e3b413
+adbcfb17
+29e1bbe7
+1baf95c9
+3c3f125c
+0259d173
+b949a4f2
+15182b84
+f40f3929
+e6fe5ec3
+81bd3b98
+2005c80c
+07bc6100
+613496bb
+
+1193847d # RSA 512 SHA-256 Digital signature
+f2dfc060
+5de4f34b
+d0290146
+f3b78f83
+a469f42f
+f7bdfed5
+41f5fc13
+2856fe41
+9f2b9f58
+f9bba63b
+3dd622b3
+7c2769f5
+fb1811fa
+2ee8b0a9
+9edbd6ef
