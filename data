@@ -1,12 +1,12 @@
 00000042 # unique packet id
 
-00000000 # total checksums processed
+00000000 # packet sequence number (total checksums processed)
 
 11bc # multibyte repeating xor key
-001d # of checksums
+001d # number of checksums, currently 29 checksums
 
 c3d42976 #RSA 512 SHA-256 XOR'd Cyclic Checksum CRC32 DWORDS
-bdf5c210
+bdf5c210  
 20327585
 d2c0da5d
 1bb8450b
