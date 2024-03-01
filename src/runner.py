@@ -5,7 +5,7 @@ from hotreload import Loader
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    script = Loader("./src/server.py")
+    script = Loader("server.py")
 
     while True:
         # Check if script has been modified since last poll.
@@ -18,3 +18,4 @@ if __name__ == "__main__":
             script.udp_server(host, port)
 
         time.sleep(1)
+	
