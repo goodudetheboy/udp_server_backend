@@ -108,30 +108,17 @@ def main():
     # Parse the command-line arguments
     args = parser.parse_args()
 
-    # Access the named arguments
-    keys_dict = args.keys
-    binaries_dict = args.binaries
-    delay = args.delay
-    port_number = args.port
-
-    if keys_dict not None:
-        keys_dict = json.loads(keys_dict)
-    
-    if binaries_dict not None:
-        binaries_dict = json.loads(binaries_dict)
-
-    print("Keys Mapping:", keys_dict)
-    print("Binaries Mapping:", binaries_dict)
-    print("Delay (seconds):", delay)
-    print("Port Number:", port_number)
-
-    # Set the host and port for the server to listen on
+    # Preparing config for UDP server
     host = "127.0.0.1"
-    # port = 1337
-    port = 1337
+    keys_dict = {} if args.keys is None else json.loads(args.keys)
+    binaries_dict = {} if args.binaries is None else json.loads(args.binaries)
+    delay = 0 if args.delay is None else args.delay
+    port = 1337 if args.port is None else args.port
+
+    server_config = ServerConfig(host, port, keys_dict, binaries_dict, delay)
 
     # Start the UDP server
-    udp_server(ServerConfig(host, port, keys_dict, binaries_dict, delay))
+    udp_server(server_config)
 
 
 if __name__ == "__main__":
