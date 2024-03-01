@@ -108,7 +108,14 @@ def verify_integrity(data: bytes):
     signature = data[-64:]
     checksums_data = data[12:12+no_of_checksum*4]
     
-    return PacketInfo(packet_id, packet_sequence_no, xor_key, no_of_checksum, signature, checksums_data)
+    return PacketInfo(
+        packet_id,
+        packet_sequence_no,
+        xor_key,
+        no_of_checksum,
+        signature,
+        checksums_data
+    )
 
 def verify_signature(packet_info: PacketInfo):
     print(packet_info.signature.hex())
@@ -129,7 +136,9 @@ def main():
     # Preparing config for UDP server
     host = "127.0.0.1"
     keys_dict = {} if args.keys is None else args.keys
+    keys_dict = utils.convert_dict_keys_to_bytes(keys_dict) # sanitize keys
     binaries_dict = {} if args.binaries is None else args.binaries
+    binaries_dict = utils.convert_dict_keys_to_bytes(binaries_dict) # sanitize bins
     delay = 0 if args.delay is None else args.delay
     port = 1337 if args.port is None else args.port
 
