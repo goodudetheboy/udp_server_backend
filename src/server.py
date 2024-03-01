@@ -8,14 +8,24 @@ import utils
 METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
 
 class PacketInfo:
-    def __init__(self, packet_id: bytes, packet_sequence_no: bytes, xor_key: bytes, no_of_checksum: int):
+    def __init__(
+            self,
+            packet_id: bytes,
+            packet_sequence_no: bytes,
+            xor_key: bytes,
+            no_of_checksum: int,
+            signature: bytes,
+            checksums_data: bytes,
+        ):
         self.packet_id = packet_id
         self.packet_sequence_no = packet_sequence_no
         self.xor_key = xor_key
         self.no_of_checksum = no_of_checksum
+        self.signature = signature
+        self.checksums_data = checksums_data
 
     def get_info(self):
-        return f"Packet ID: {utils.print_bytes(self.packet_id)}\n\tPacket Sequence No: {utils.print_bytes(self.packet_sequence_no)}\n\tXOR key: {utils.print_bytes(self.xor_key)}\n\tNumber of checksum: {self.no_of_checksum}"
+        return f"Packet ID: {utils.print_bytes(self.packet_id)}\n\tPacket Sequence No: {utils.print_bytes(self.packet_sequence_no)}\n\tXOR key: {utils.print_bytes(self.xor_key)}\n\tNumber of checksum: {self.no_of_checksum}\n"
 
 class ServerConfig:
     def __init__(self, host, port, keys, binaries, delay):
@@ -44,27 +54,20 @@ def udp_server(server_config: ServerConfig):
             # Receive data and address from client
             data, client_address = server_socket.recvfrom(2048)
             
-            # Convert binary data to hexadecimal
-            hex_data = binascii.hexlify(data).decode('utf-8')
-
-            # Split hex data into lines with 4 characters each
-            lines = split_hex_data(hex_data, 8)
-
+            # Verify structural integrity of data
             packet_info = verify_integrity(data)
-
             if packet_info is None:
                 print(f"Data received is invalid.")
                 continue
-            
             print(packet_info.get_info())
-            # Print received data in formatted lines and client address
-            # print(f"Received data from {client_address}:\n" + "\n".join(lines))
-            # print("end") 
+
+            # Verify digital signature
+            verify_signature(packet_info)
 
             # Echo back the received data to the client
             server_socket.sendto(data, client_address)
 
-def verify_integrity(data):   
+def verify_integrity(data: bytes):   
     """
     Verify the structural integrity of the given data packet as specified
     in the documentation. This first checks if the length of the given data
@@ -93,12 +96,19 @@ def verify_integrity(data):
     no_of_checksum = int.from_bytes(data[10:12])
 
     # length of no checksum plus len of metadata must match length of input
-    # byte array
-    # no_of_checksum * 4 + METADATA_BYTE_SIZE == len(data)
+    # byte array, aka no_of_checksum * 4 + METADATA_BYTE_SIZE == len(data)
     if no_of_checksum * 4 + METADATA_BYTE_SIZE != len(data):
         return None
+
+    # rest of the part is valid, so pack into a PacketInfo and resend
+    signature = data[-64:]
+    checksums_data = data[12:12+no_of_checksum*4]
     
-    return PacketInfo(packet_id, packet_sequence_no, xor_key, no_of_checksum)
+    return PacketInfo(packet_id, packet_sequence_no, xor_key, no_of_checksum, signature, checksums_data)
+
+def verify_signature(packet_info: PacketInfo):
+    print(packet_info.signature.hex())
+    return
 
 def main():
     # Create an ArgumentParser object
