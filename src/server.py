@@ -61,6 +61,10 @@ def udp_server(server_config: ServerConfig):
                 continue
             print(packet_info.get_info())
 
+            if packet_info.packet_id not in server_config.keys:
+                print(f"No key provided for packet id 0x{packet_info.packet_id.hex()}")
+                continue
+            
             # Verify digital signature
             verify_signature(packet_info)
 
@@ -122,11 +126,10 @@ def main():
 
     # Parse the command-line arguments
     args = parser.parse_args()
-
     # Preparing config for UDP server
     host = "127.0.0.1"
-    keys_dict = {} if args.keys is None else json.loads(args.keys)
-    binaries_dict = {} if args.binaries is None else json.loads(args.binaries)
+    keys_dict = {} if args.keys is None else args.keys
+    binaries_dict = {} if args.binaries is None else args.binaries
     delay = 0 if args.delay is None else args.delay
     port = 1337 if args.port is None else args.port
 
