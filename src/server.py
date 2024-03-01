@@ -28,7 +28,14 @@ class PacketInfo:
         return f"Packet ID: {utils.print_bytes(self.packet_id)}\n\tPacket Sequence No: {utils.print_bytes(self.packet_sequence_no)}\n\tXOR key: {utils.print_bytes(self.xor_key)}\n\tNumber of checksum: {self.no_of_checksum}\n"
 
 class ServerConfig:
-    def __init__(self, host, port, keys, binaries, delay):
+    def __init__(
+            self,
+            host: str,
+            port: int,
+            keys: dict[bytes, bytes],
+            binaries: dict,
+            delay: float
+        ):
         self.host = host
         self.port = port
         self.keys = keys
@@ -61,10 +68,11 @@ def udp_server(server_config: ServerConfig):
                 continue
             print(packet_info.get_info())
 
+            # Check if have packet_id in keychain
             if packet_info.packet_id not in server_config.keys:
                 print(f"No key provided for packet id 0x{packet_info.packet_id.hex()}")
                 continue
-            
+
             # Verify digital signature
             verify_signature(packet_info)
 
@@ -121,11 +129,29 @@ def verify_signature(packet_info: PacketInfo):
     print(packet_info.signature.hex())
     return
 
+def load_keys(keys_dict: dict[str, str]):
+    keys = {}
+
+    for key_id, key_path in keys_dict.items():
+        # Convert key_id to bytes
+        key_id_bytes = utils.convert_packet_id_to_bytes(key_id)
+
+        # Load the content of the key file
+        try:
+            with open(key_path, 'rb') as key_file:
+                key_content = key_file.read()
+            keys[key_id_bytes] = key_content
+        except FileNotFoundError:
+            # If not found, warn 
+            print(f"Warning: Key not found for key_id '{key_id}' at path '{key_path}'")
+
+    return keys
+
+
 def main():
-    # Create an ArgumentParser object
+    # Parser object to parse named args
     parser = argparse.ArgumentParser()
 
-    # Add named arguments
     parser.add_argument('--keys', type=ast.literal_eval, help='Dictionary of {packet_id: key_file_path} mappings')
     parser.add_argument('--binaries', type=ast.literal_eval, help='Dictionary of {packet_id: binary_path} mappings')
     parser.add_argument('-d', '--delay', type=float, help='Delay (in seconds) for writing to log files')
@@ -133,10 +159,11 @@ def main():
 
     # Parse the command-line arguments
     args = parser.parse_args()
-    # Preparing config for UDP server
+
+    # Prepare config for UDP server
     host = "127.0.0.1"
     keys_dict = {} if args.keys is None else args.keys
-    keys_dict = utils.convert_dict_keys_to_bytes(keys_dict) # sanitize keys
+    keys_dict = load_keys(keys_dict) # sanitize keys
     binaries_dict = {} if args.binaries is None else args.binaries
     binaries_dict = utils.convert_dict_keys_to_bytes(binaries_dict) # sanitize bins
     delay = 0 if args.delay is None else args.delay
@@ -150,5 +177,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# def verify_signature(data, packet_info: PacketInfo):
