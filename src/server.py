@@ -2,16 +2,20 @@ import socket
 import binascii
 import argparse # for parsing arguments
 import ast # args parsing support for dict conversion 
-import json 
+import json
+import utils
 
 METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
 
 class PacketInfo:
-    def __init__(self, packet_id, packet_sequence_no, xor_key, no_of_checksum):
+    def __init__(self, packet_id: bytes, packet_sequence_no: bytes, xor_key: bytes, no_of_checksum: int):
         self.packet_id = packet_id
         self.packet_sequence_no = packet_sequence_no
         self.xor_key = xor_key
         self.no_of_checksum = no_of_checksum
+
+    def get_info(self):
+        return f"Packet ID: {utils.print_bytes(self.packet_id)}\n\tPacket Sequence No: {utils.print_bytes(self.packet_sequence_no)}\n\tXOR key: {utils.print_bytes(self.xor_key)}\n\tNumber of checksum: {self.no_of_checksum}"
 
 class ServerConfig:
     def __init__(self, host, port, keys, binaries, delay):
@@ -49,9 +53,10 @@ def udp_server(server_config: ServerConfig):
             packet_info = verify_integrity(data)
 
             if packet_info is None:
-                print(f"Received data from {client_address}:\n" + "\n".join(lines))
-                return 
-
+                print(f"Data received is invalid.")
+                continue
+            
+            print(packet_info.get_info())
             # Print received data in formatted lines and client address
             # print(f"Received data from {client_address}:\n" + "\n".join(lines))
             # print("end") 

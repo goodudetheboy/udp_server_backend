@@ -11,11 +11,7 @@ if __name__ == "__main__":
         # Check if script has been modified since last poll.
         if script.has_changed():
             # Execute a function from script if it has been modified.
-            host = "127.0.0.1"
-            port = 1337
-
-            # Start the UDP server
-            script.udp_server(host, port)
+            script.main()
 
         time.sleep(1)
 	
