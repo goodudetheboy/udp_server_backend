@@ -2,12 +2,6 @@ import socket
 import argparse # for parsing arguments
 import ast # args parsing support for dict conversion 
 import utils
-import hashlib
-
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import padding
 
 
 METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
@@ -16,7 +10,7 @@ class PacketInfo:
     def __init__(
             self,
             packet_id: int,
-            packet_sequence_no: bytes,
+            packet_sequence_no: int,
             xor_key: bytes,
             no_of_checksum: int,
             signature: bytes,
@@ -30,7 +24,7 @@ class PacketInfo:
         self.checksums_data = checksums_data
 
     def get_info(self):
-        return f"Packet ID: {utils.print_int_hex(self.packet_id)}\n\tPacket Sequence No: {utils.print_bytes(self.packet_sequence_no)}\n\tXOR key: {utils.print_bytes(self.xor_key)}\n\tNumber of checksum: {self.no_of_checksum}\n"
+        return f"Packet ID: {utils.print_int_hex(self.packet_id)}\n\tPacket Sequence No: {utils.print_int_hex(self.packet_sequence_no)}\n\tXOR key: {utils.print_bytes(self.xor_key)}\n\tNumber of checksum: {self.no_of_checksum}\n"
 
 class ServerConfig:
     def __init__(
@@ -108,7 +102,7 @@ def verify_integrity(data: bytes):
         return None
 
     packet_id = int.from_bytes(data[0:4])
-    packet_sequence_no = data[4:8]
+    packet_sequence_no = int.from_bytes(data[4:8])
     xor_key = data[8:10]
     no_of_checksum = int.from_bytes(data[10:12])
 
@@ -140,7 +134,7 @@ def verify_signature(data: bytes, packet_info: PacketInfo, key_bytes: bytes):
 
     if result is False:
         with open("verification_failures.log", "a") as log_file:
-            log_file.write(f"{packet_info.packet_id}\n")
+            log_file.write(f"{hex(packet_info.packet_id)}\n")
             log_file.write(f"{packet_info.packet_sequence_no}\n")
             log_file.write(f"{received}\n")
             log_file.write(f"{expected}\n")
