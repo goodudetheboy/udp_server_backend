@@ -17,7 +17,7 @@ for payload in payloads:
     count += 1
     sock.sendto(payload, ('127.0.0.1', 1337))
     time.sleep(0.001)
-    # if count == 20:
-    #     break
+    if count == 20:
+        break
 
 sock.close()

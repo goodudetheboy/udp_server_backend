@@ -41,10 +41,6 @@ class ServerConfig:
         self.binaries = binaries
         self.delay = delay
 
-def split_hex_data(hex_data, chunk_size):
-    # Split the hex data into chunks of the specified size
-    return [hex_data[i:i+chunk_size] for i in range(0, len(hex_data), chunk_size)]
-
 def udp_server(server_config: ServerConfig):
 
     host = server_config.host
