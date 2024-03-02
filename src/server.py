@@ -131,6 +131,7 @@ def verify_integrity(data: bytes):
 
 def verify_signature(data: bytes, packet_info: PacketInfo, key_bytes: bytes):
     print(len(key_bytes))
+    print(utils.hash_data_with_key(data[:-64], key_bytes)[2])
     try:
         private_key = serialization.load_pem_private_key(
             key_bytes[-64:],
