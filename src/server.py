@@ -1,16 +1,20 @@
 import socket
-import binascii
 import argparse # for parsing arguments
 import ast # args parsing support for dict conversion 
-import json
 import utils
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+
 
 METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
 
 class PacketInfo:
     def __init__(
             self,
-            packet_id: bytes,
+            packet_id: int,
             packet_sequence_no: bytes,
             xor_key: bytes,
             no_of_checksum: int,
@@ -25,14 +29,14 @@ class PacketInfo:
         self.checksums_data = checksums_data
 
     def get_info(self):
-        return f"Packet ID: {utils.print_bytes(self.packet_id)}\n\tPacket Sequence No: {utils.print_bytes(self.packet_sequence_no)}\n\tXOR key: {utils.print_bytes(self.xor_key)}\n\tNumber of checksum: {self.no_of_checksum}\n"
+        return f"Packet ID: {utils.print_int_hex(self.packet_id)}\n\tPacket Sequence No: {utils.print_bytes(self.packet_sequence_no)}\n\tXOR key: {utils.print_bytes(self.xor_key)}\n\tNumber of checksum: {self.no_of_checksum}\n"
 
 class ServerConfig:
     def __init__(
             self,
             host: str,
             port: int,
-            keys: dict[bytes, bytes],
+            keys: dict[int, bytes],
             binaries: dict,
             delay: float
         ):
@@ -70,11 +74,11 @@ def udp_server(server_config: ServerConfig):
 
             # Check if have packet_id in keychain
             if packet_info.packet_id not in server_config.keys:
-                print(f"No key provided for packet id 0x{packet_info.packet_id.hex()}")
+                print(f"No key provided for packet id 0x{hex(packet_info.packet_id)}")
                 continue
 
             # Verify digital signature
-            verify_signature(packet_info)
+            verify_signature(data, packet_info, server_config.keys[packet_info.packet_id])
 
             # Echo back the received data to the client
             server_socket.sendto(data, client_address)
@@ -102,7 +106,7 @@ def verify_integrity(data: bytes):
     if len(data) < METADATA_BYTE_SIZE:
         return None
 
-    packet_id = data[0:4]
+    packet_id = int.from_bytes(data[0:4])
     packet_sequence_no = data[4:8]
     xor_key = data[8:10]
     no_of_checksum = int.from_bytes(data[10:12])
@@ -114,7 +118,7 @@ def verify_integrity(data: bytes):
 
     # rest of the part is valid, so pack into a PacketInfo and resend
     signature = data[-64:]
-    checksums_data = data[12:12+no_of_checksum*4]
+    checksums_data = data[12:12 + no_of_checksum * 4]
     
     return PacketInfo(
         packet_id,
@@ -125,16 +129,34 @@ def verify_integrity(data: bytes):
         checksums_data
     )
 
-def verify_signature(packet_info: PacketInfo):
-    print(packet_info.signature.hex())
-    return
+def verify_signature(data: bytes, packet_info: PacketInfo, key_bytes: bytes):
+    print(len(key_bytes))
+    try:
+        private_key = serialization.load_pem_private_key(
+            key_bytes[-64:],
+            password=None,
+            backend=default_backend()
+        )
+        print(private_key)
+        gen_signature = private_key.sign(
+            data[:-64],
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
 
-def load_keys(keys_dict: dict[str, str]):
+        print("Received hash:", packet_info.signature)
+        print("Expected hash:", gen_signature)
+        return True
+    except Exception as e:
+        print(f"Error verifying signature: {e}")
+        return False
+
+def load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
     keys = {}
 
     for key_id, key_path in keys_dict.items():
         # Convert key_id to bytes
-        key_id_bytes = utils.convert_packet_id_to_bytes(key_id)
+        key_id_bytes = utils.convert_packet_id_to_int(key_id)
 
         # Load the content of the key file
         try:
