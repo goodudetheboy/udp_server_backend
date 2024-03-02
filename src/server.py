@@ -2,6 +2,7 @@ import socket
 import argparse # for parsing arguments
 import ast # args parsing support for dict conversion 
 import utils
+import hashlib
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -130,27 +131,20 @@ def verify_integrity(data: bytes):
     )
 
 def verify_signature(data: bytes, packet_info: PacketInfo, key_bytes: bytes):
-    print(len(key_bytes))
-    print(utils.hash_data_with_key(data[:-64], key_bytes)[2])
-    try:
-        private_key = serialization.load_pem_private_key(
-            key_bytes[-64:],
-            password=None,
-            backend=default_backend()
-        )
-        print(private_key)
-        gen_signature = private_key.sign(
-            data[:-64],
-            padding.PKCS1v15(),
-            hashes.SHA256(),
-        )
+    data = data[:-64]
+    signature = packet_info.signature
+    modulus = int.from_bytes(key_bytes[-64:])
+    exponent = int.from_bytes(key_bytes[:3])
+    
+    result, received, expected = utils.verify_rsa_signature(data, signature, modulus, exponent)
 
-        print("Received hash:", packet_info.signature)
-        print("Expected hash:", gen_signature)
-        return True
-    except Exception as e:
-        print(f"Error verifying signature: {e}")
-        return False
+    if result is False:
+        with open("verification_failures.log", "a") as log_file:
+            log_file.write(f"{packet_info.packet_id}\n")
+            log_file.write(f"{packet_info.packet_sequence_no}\n")
+            log_file.write(f"{received}\n")
+            log_file.write(f"{expected}\n")
+            log_file.write("\n")
 
 def load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
     keys = {}

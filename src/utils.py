@@ -1,5 +1,8 @@
 import hmac
 import hashlib
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
 def print_bytes(bs: bytes):
     return f"{int.from_bytes(bs)} (0x{bs.hex()})"
@@ -25,16 +28,32 @@ def convert_dict_keys_to_bytes(original_dict):
         converted_dict[converted_key] = value
     return converted_dict
 
-def hash_data_with_key(data, key):
-    # Ensure the key and data are bytes
-    key = key.encode('utf-8') if isinstance(key, str) else key
-    data = data.encode('utf-8') if isinstance(data, str) else data
+def verify_rsa_signature(data: bytes, signature: bytes, modulus: int, exponent: int):
+    # Construct the public key
+    public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key(default_backend())
 
-    # Calculate the HMAC using SHA256 as the hash function
-    hashed_data = hmac.new(key, data, hashlib.sha256).digest()
-    
-    # Optionally, you can convert the binary digest to a hex or base64 representation
-    hashed_data_hex = hashed_data.hex()
-    hashed_data_base64 = hmac.new(key, data, hashlib.sha256).digest().hex()
+    # Hash the data
+    hasher = hashes.Hash(hashes.SHA256(), default_backend())
+    hasher.update(data)
+    hashed_data = hasher.finalize()
+    expected_hash = hashed_data.hex()
+    print(f"Hashed Data: {hashed_data.hex()}")
 
-    return hashed_data, hashed_data_hex, hashed_data_base64
+    # Get hash from decrypted signature
+    result = pow(int.from_bytes(signature), exponent, modulus)
+    received_hash = hex(result)[-64:]
+    print(f"Decoded Public Key Hash: {received_hash}")
+
+    # Verify the signature
+    try:
+        public_key.verify(
+            signature,
+            data,
+            padding.PKCS1v15(),
+            hashes.SHA256()
+        )
+        print("Signature verification successful.")
+        return True, received_hash, expected_hash
+    except Exception as e:
+        print(f"Signature verification failed: {e}")
+        return False, received_hash, expected_hash
