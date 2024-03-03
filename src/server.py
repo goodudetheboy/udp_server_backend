@@ -72,8 +72,8 @@ def udp_server(server_config: ServerConfig):
                 print(f"Data received is invalid.")
                 continue
             
-            if packet_info.packet_sequence_no != 1109:
-                continue
+            # if packet_info.packet_sequence_no != 1109:
+            #     continue
             print(packet_info.get_info())
 
             # Check if have packet_id in keychain
@@ -233,7 +233,7 @@ def verify_checksums(
         return True
     except FileNotFoundError:
         print(f"Error: Validating checksum failed because binary file not found" 
-              "for packet_id '{packet_info.packet_id}' at path '{binary_path}'")
+              f"for packet_id '{packet_info.packet_id}' at path '{binary_path}'")
         return False
 
 def load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
