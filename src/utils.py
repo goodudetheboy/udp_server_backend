@@ -1,12 +1,12 @@
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
-
+import binascii
 def print_bytes(bs: bytes) -> str:
     return f"{int.from_bytes(bs)} (0x{bs.hex()})"
 
 def print_int_hex(num: int) -> str:
-    return f"{num} (0x{hex(num)})"
+    return f"{num} ({hex(num)})"
 
 def convert_packet_id_to_int(packet_id: str) -> int:
     # Sanitize the data by removing leading and trailing whitespaces
@@ -18,13 +18,6 @@ def convert_packet_id_to_int(packet_id: str) -> int:
     elif packet_id.startswith("0x"):
         # If it starts with "0x", treat it as hex
         return int(packet_id, 16)
-
-def convert_dict_keys_to_bytes(original_dict):
-    converted_dict = {}
-    for key, value in original_dict.items():
-        converted_key = convert_packet_id_to_int(key)
-        converted_dict[converted_key] = value
-    return converted_dict
 
 def verify_rsa_signature(
         data: bytes,
@@ -53,13 +46,13 @@ def verify_rsa_signature(
     hasher.update(data)
     hashed_data = hasher.finalize()
     expected = hashed_data.hex()
-    print(f"Hashed Data: {hashed_data.hex()}")
+    # print(f"Hashed Data: {hashed_data.hex()}")
 
     # Decrypt digital signature (manually do this because public_key.encrypt is
     # dumb)
     result = pow(int.from_bytes(signature), exponent, modulus)
     received = hex(result)[-64:].removeprefix("0x").rjust(64, "0")
-    print(f"Decoded Public Key Hash: {received}")
+    # print(f"Decoded Public Key Hash: {received}")
 
     # TODO: investigate why this doesn't work
     # received = public_key.encrypt(signature, padding=padding.PKCS1v15())
@@ -72,8 +65,20 @@ def verify_rsa_signature(
             padding.PKCS1v15(),
             hashes.SHA256()
         )
-        print("Signature verification successful.")
         return True, received, expected
     except Exception as e:
-        print(f"Signature verification failed: {e}")
         return False, received, expected
+    
+def xor_decrypt(data: bytes, key: bytes):
+    decrypted_data = bytearray()
+    key_length = len(key)
+
+    for i, byte in enumerate(data):
+        decrypted_data.append(byte ^ key[i % key_length])
+
+    return bytes(decrypted_data)
+
+def calculate_crc32_dword(data_dword):
+    # Calculate the CRC32 checksum for the single DWORD
+    crc32_checksum = binascii.crc32(data_dword)
+    return crc32_checksum

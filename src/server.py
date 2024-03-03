@@ -1,3 +1,4 @@
+import itertools
 import socket
 import argparse # for parsing arguments
 import ast # args parsing support for dict conversion 
@@ -32,7 +33,7 @@ class PacketInfo:
             f"Packet ID: {utils.print_int_hex(self.packet_id)}\n"
             f"\tPacket Sequence No: {self.packet_sequence_no}\n"
             f"\tXOR key: {utils.print_bytes(self.xor_key)}\n"
-            f"\tNumber of checksum: {self.no_of_checksum}\n"
+            f"\tNumber of checksum: {self.no_of_checksum}"
         )
 
 class ServerConfig:
@@ -41,7 +42,7 @@ class ServerConfig:
             host: str,
             port: int,
             keys: dict[int, bytes],
-            binaries: dict,
+            binaries: dict[int, str],
             delay: float
         ):
         self.host = host
@@ -70,6 +71,9 @@ def udp_server(server_config: ServerConfig):
             if packet_info is None:
                 print(f"Data received is invalid.")
                 continue
+            
+            if packet_info.packet_sequence_no != 1109:
+                continue
             print(packet_info.get_info())
 
             # Check if have packet_id in keychain
@@ -90,8 +94,17 @@ def udp_server(server_config: ServerConfig):
                       f" packet id 0x{packet_info.packet_id}.")
 
             # Verify checksums
-            
+            result = verify_checksums(
+                data,
+                packet_info,
+                server_config.binaries[packet_info.packet_id]
+            )
 
+            if result is False:
+                print(f"Checksums validation failed for"
+                      f" packet id 0x{packet_info.packet_id}.")
+
+            print()
             # Echo back the received data to the client
             server_socket.sendto(data, client_address)
 
@@ -171,33 +184,94 @@ def verify_signature(
     
     result, received, expected = utils.verify_rsa_signature(data, signature, modulus, exponent)
 
-    if result is False:
+    if result is True:
+        print("\tSignature verification successful")
+    else:
         with open("verification_failures.log", "a") as log_file:
             log_file.write(f"{hex(packet_info.packet_id)}\n")
             log_file.write(f"{packet_info.packet_sequence_no}\n")
             log_file.write(f"{received}\n")
             log_file.write(f"{expected}\n")
             log_file.write("\n")
+        print("\tSignature verification failed, check verification_failures.log"
+                " for more details")
+
+
+def verify_checksums(
+        data: bytes,
+        packet_info: PacketInfo,
+        binary_path: str
+    ) -> bool:
+    sequence_no = packet_info.packet_sequence_no
+    xor_key = packet_info.xor_key
+    no_of_checksum = packet_info.no_of_checksum
+    
+    # get data checksum, starting at bytes 12 and go all the way till the
+    # digital signature
+    checksum_data = utils.xor_decrypt(data[12:-64], xor_key)
+    
+    try:
+        with open(binary_path, 'rb') as binary_file:
+            binary_file.seek(sequence_no * 4)
+            # print(packet_info.no_of_checksum)
+            # print(binary_file.read(packet_info.no_of_checksum * 4).hex())
+            for i in range(0, no_of_checksum):
+                expected = binary_file.read(4)
+                print(expected.hex())
+                expected = utils.calculate_crc32_dword(expected)
+
+                received = checksum_data[4 * i : 4 * i + 4]
+                
+                print("Received CRC32:", received.hex())
+                print("Expected CRC32:", hex(expected))
+
+                if expected != received:
+                    print("Checksum validation failed")
+
+        # everything checks out, returns True
+        print("Checksum validation successful")
+        return True
+    except FileNotFoundError:
+        print(f"Error: Validating checksum failed because binary file not found" 
+              "for packet_id '{packet_info.packet_id}' at path '{binary_path}'")
+        return False
 
 def load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
     keys = {}
 
-    for key_id, key_path in keys_dict.items():
-        # Convert key_id to bytes
-        key_id_bytes = utils.convert_packet_id_to_int(key_id)
+    for packet_id, key_path in keys_dict.items():
+        # Convert key_id to int
+        packet_id_int = utils.convert_packet_id_to_int(packet_id)
 
         # Load the content of the key file
         try:
             with open(key_path, 'rb') as key_file:
                 key_content = key_file.read()
-            keys[key_id_bytes] = key_content
+            keys[packet_id_int] = key_content
         except FileNotFoundError:
             # If not found, warn 
-            print(f"Warning: Key not found for key_id '{key_id}' at path"
+            print(f"Warning: Key not found for packet_id '{packet_id}' at path"
                   f" '{key_path}'")
 
     return keys
 
+def load_binaries(binaries_dict: dict[str, str]) -> dict[int, bytes]:
+    binaries = {}
+
+    for packet_id, binary_path in binaries_dict.items():
+        # Convert key_id to int
+        packet_id_int = utils.convert_packet_id_to_int(packet_id)
+
+        # Load the content of the key file
+        try:
+            with open(binary_path, 'rb'):
+                binaries[packet_id_int] = binary_path
+        except FileNotFoundError:
+            # If not found, warn 
+            print(f"Warning: Binary path not found for packet_id '{packet_id}'"
+                  f" at path '{binary_path}'")
+
+    return binaries
 
 def main():
     # Parser object to parse named args
@@ -216,7 +290,7 @@ def main():
     keys_dict = {} if args.keys is None else args.keys
     keys_dict = load_keys(keys_dict) # sanitize keys
     binaries_dict = {} if args.binaries is None else args.binaries
-    binaries_dict = utils.convert_dict_keys_to_bytes(binaries_dict) # sanitize bins
+    binaries_dict = load_binaries(binaries_dict) # sanitize bins
     delay = 0 if args.delay is None else args.delay
     port = 1337 if args.port is None else args.port
 
