@@ -4,13 +4,13 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
-def print_bytes(bs: bytes):
+def print_bytes(bs: bytes) -> str:
     return f"{int.from_bytes(bs)} (0x{bs.hex()})"
 
-def print_int_hex(num: int):
+def print_int_hex(num: int) -> str:
     return f"{num} (0x{hex(num)})"
 
-def convert_packet_id_to_int(packet_id: str):
+def convert_packet_id_to_int(packet_id: str) -> int:
     # Sanitize the data by removing leading and trailing whitespaces
     packet_id = packet_id.strip()
 
@@ -28,7 +28,13 @@ def convert_dict_keys_to_bytes(original_dict):
         converted_dict[converted_key] = value
     return converted_dict
 
-def verify_rsa_signature(data: bytes, signature: bytes, modulus: int, exponent: int):   
+def verify_rsa_signature(
+        data: bytes,
+        signature: bytes,
+        modulus: int,
+        exponent:
+        int
+    ) -> tuple[bool, str, str]:
     """
     Verify an RSA-512 SHA-256 digital signature for the given data.
 
@@ -51,10 +57,13 @@ def verify_rsa_signature(data: bytes, signature: bytes, modulus: int, exponent: 
     expected = hashed_data.hex()
     print(f"Hashed Data: {hashed_data.hex()}")
 
-    # Decrypt digital signature (manually do this because public_key.verify is dumb)
+    # Decrypt digital signature (manually do this because public_key.verify is
+    # dumb)
     result = pow(int.from_bytes(signature), exponent, modulus)
     received = hex(result)[-64:].removeprefix("0x").rjust(64, "0")
     print(f"Decoded Public Key Hash: {received}")
+
+    received = public_key.encrypt(signature, padding=padding.PKCS1v15())
 
     # Verify the signature
     try:

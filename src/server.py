@@ -23,8 +23,17 @@ class PacketInfo:
         self.signature = signature
         self.checksums_data = checksums_data
 
-    def get_info(self):
-        return f"Packet ID: {utils.print_int_hex(self.packet_id)}\n\tPacket Sequence No: {utils.print_int_hex(self.packet_sequence_no)}\n\tXOR key: {utils.print_bytes(self.xor_key)}\n\tNumber of checksum: {self.no_of_checksum}\n"
+    def get_info(self) -> str:
+        """
+        Return the info containing the ID, packet sequence number, XOR key, and
+        the number of checksums.
+        """
+        return (
+            f"Packet ID: {utils.print_int_hex(self.packet_id)}\n"
+            f"\tPacket Sequence No: {self.packet_sequence_no}\n"
+            f"\tXOR key: {utils.print_bytes(self.xor_key)}\n"
+            f"\tNumber of checksum: {self.no_of_checksum}\n"
+        )
 
 class ServerConfig:
     def __init__(
@@ -74,7 +83,7 @@ def udp_server(server_config: ServerConfig):
             # Echo back the received data to the client
             server_socket.sendto(data, client_address)
 
-def verify_integrity(data: bytes):   
+def verify_integrity(data: bytes) -> PacketInfo | None:   
     """
     Verify the structural integrity of the given data packet as specified
     in the documentation. This first checks if the length of the given data
@@ -86,7 +95,7 @@ def verify_integrity(data: bytes):
         data (bytes): raw input from the port.
 
     Returns:
-        None | PacketInfo: return None if the data's structual integrity is 
+        PacketInfo | None: return None if the data's structual integrity is 
         does not meet the above requirement. Return a PacketInfo containing
         the data's packet_id, packet_sequence_no, xor_key, and the number 
         of checksum.  
@@ -120,7 +129,12 @@ def verify_integrity(data: bytes):
         checksums_data
     )
 
-def verify_signature(data: bytes, packet_info: PacketInfo, key_bytes: bytes):
+def verify_signature(
+        data: bytes,
+        packet_info:
+        PacketInfo,
+        key_bytes: bytes
+    ) -> bool:
     data = data[:-64]
     signature = packet_info.signature
     modulus = int.from_bytes(key_bytes[-64:])
@@ -150,7 +164,8 @@ def load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
             keys[key_id_bytes] = key_content
         except FileNotFoundError:
             # If not found, warn 
-            print(f"Warning: Key not found for key_id '{key_id}' at path '{key_path}'")
+            print(f"Warning: Key not found for key_id '{key_id}' at path"
+                  f" '{key_path}'")
 
     return keys
 
@@ -159,10 +174,10 @@ def main():
     # Parser object to parse named args
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--keys', type=ast.literal_eval, help='Dictionary of {packet_id: key_file_path} mappings')
-    parser.add_argument('--binaries', type=ast.literal_eval, help='Dictionary of {packet_id: binary_path} mappings')
-    parser.add_argument('-d', '--delay', type=float, help='Delay (in seconds) for writing to log files')
-    parser.add_argument('-p', '--port', type=int, help='Port number to receive packets on')
+    parser.add_argument('--keys', type=ast.literal_eval)
+    parser.add_argument('--binaries', type=ast.literal_eval)
+    parser.add_argument('-d', '--delay', type=float)
+    parser.add_argument('-p', '--port', type=int)
 
     # Parse the command-line arguments
     args = parser.parse_args()
