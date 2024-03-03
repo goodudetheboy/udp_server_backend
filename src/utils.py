@@ -1,5 +1,3 @@
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_v1_5
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -57,13 +55,14 @@ def verify_rsa_signature(
     expected = hashed_data.hex()
     print(f"Hashed Data: {hashed_data.hex()}")
 
-    # Decrypt digital signature (manually do this because public_key.verify is
+    # Decrypt digital signature (manually do this because public_key.encrypt is
     # dumb)
     result = pow(int.from_bytes(signature), exponent, modulus)
     received = hex(result)[-64:].removeprefix("0x").rjust(64, "0")
     print(f"Decoded Public Key Hash: {received}")
 
-    received = public_key.encrypt(signature, padding=padding.PKCS1v15())
+    # TODO: investigate why this doesn't work
+    # received = public_key.encrypt(signature, padding=padding.PKCS1v15())
 
     # Verify the signature
     try:
