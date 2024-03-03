@@ -37,13 +37,13 @@ def verify_rsa_signature(
     Verify an RSA-512 SHA-256 digital signature for the given data.
 
     Args:
-    - data (bytes): The data that was signed.
-    - signature (bytes): The RSA511 SHA-256 digital signature to be verified.
-    - modulus (int): the modulus value of the RSA-512
-    - exponent (int): the modulus value of the RSA-512
+        data (bytes): The data that was signed
+        signature (bytes): The RSA511 SHA-256 digital signature to be verified
+        modulus (int): the modulus value of the RSA-512
+        exponent (int): the modulus value of the RSA-512
 
     Returns:
-    - valid: True if the signature is valid, False otherwise.
+        bool: True if the signature is valid, False otherwise.
     """
     # Construct the public key
     public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key(default_backend())

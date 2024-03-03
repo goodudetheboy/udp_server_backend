@@ -74,11 +74,23 @@ def udp_server(server_config: ServerConfig):
 
             # Check if have packet_id in keychain
             if packet_info.packet_id not in server_config.keys:
-                print(f"No key provided for packet id 0x{hex(packet_info.packet_id)}")
+                print(f"No key provided for packet id"
+                      f" 0x{hex(packet_info.packet_id)}")
                 continue
 
             # Verify digital signature
-            verify_signature(data, packet_info, server_config.keys[packet_info.packet_id])
+            result = verify_signature(
+                data,
+                packet_info,
+                server_config.keys[packet_info.packet_id]
+            )
+
+            if result is False:
+                print(f"Digital signature validation failed for"
+                      f" packet id 0x{packet_info.packet_id}.")
+
+            # Verify checksums
+            
 
             # Echo back the received data to the client
             server_socket.sendto(data, client_address)
@@ -131,14 +143,31 @@ def verify_integrity(data: bytes) -> PacketInfo | None:
 
 def verify_signature(
         data: bytes,
-        packet_info:
-        PacketInfo,
-        key_bytes: bytes
+        packet_info: PacketInfo,
+        public_key: bytes
     ) -> bool:
+    """
+    Verify that the RSA 512 SHA-256 digital signature provided in the packet
+    is correct. If it is not, the error will be logged to the file
+    verification_failures.log in the format:
+        (packet id - in hex)
+        (packet sequence number)
+        (received hash)
+        (expected hash)
+        (trailing newline)
+
+    Args:
+        data (bytes): data from this packet, including the digital signature
+        packet_info (PacketInfo): info extracted from this package
+        public_key (bytes): Public key for the digital signature
+    
+    Returns:
+        bool: True if the verification is valid, False otherwise.
+    """
     data = data[:-64]
     signature = packet_info.signature
-    modulus = int.from_bytes(key_bytes[-64:])
-    exponent = int.from_bytes(key_bytes[:3])
+    modulus = int.from_bytes(public_key[-64:])
+    exponent = int.from_bytes(public_key[:3])
     
     result, received, expected = utils.verify_rsa_signature(data, signature, modulus, exponent)
 
