@@ -3,7 +3,8 @@ import socket
 import argparse # for parsing arguments
 import ast # args parsing support for dict conversion 
 import utils
-
+import zlib
+import fastcrc
 
 METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
 
@@ -36,13 +37,38 @@ class PacketInfo:
             f"\tNumber of checksum: {self.no_of_checksum}"
         )
 
+
+class FileChecksums:
+    def __init__(self, binary_path: str):
+        self.binary_path = binary_path
+        self.checksums: list[int] = []
+
+    def calc_checksum(self, iter: int) -> int:
+        checksums = self.checksums
+        
+        # check if input iteration are already calculated
+        # if not then continue calculating
+        if len(checksums) <= iter:
+            binary_data = None
+            try:
+                with open(self.binary_path, "rb") as binary_file:
+                    binary_data = binary_file.read()
+            except FileNotFoundError:
+                raise FileNotFoundError
+            while len(checksums) <= iter:
+                prev = 0 if len(checksums) == 0 else checksums[-1]
+                new_chksum = zlib.crc32(binary_data, prev)
+                checksums.append(new_chksum)
+        
+        return checksums[iter]
+
 class ServerConfig:
     def __init__(
             self,
             host: str,
             port: int,
             keys: dict[int, bytes],
-            binaries: dict[int, str],
+            binaries: dict[int, FileChecksums],
             delay: float
         ):
         self.host = host
@@ -198,7 +224,7 @@ def verify_signature(
 
 def verify_checksums(
         packet_info: PacketInfo,
-        binary_path: str
+        file_checksums: FileChecksums
     ) -> bool:
     sequence_no = packet_info.packet_sequence_no
     xor_key = packet_info.xor_key
@@ -208,39 +234,40 @@ def verify_checksums(
     # digital signature
     checksums = utils.xor_decrypt(packet_info.checksums_data, xor_key)
     
+    is_success = True
+    # pre-calculate
     try:
-        with open(binary_path, 'rb') as binary_file:
-            binary_file.seek(1109 * 4)
-            fuck = (binary_file.read(11 * 4))
-            print(fuck.hex())
-            # print(hex(utils.calculate_crc32_dword(fuck)))
-            binary_file.seek(sequence_no * 4)
-            # binary_file.seek(199989 * 4)
-            # print(packet_info.no_of_checksum)
-            # print(binary_file.read(packet_info.no_of_checksum * 4).hex())
-            for i in range(0, no_of_checksum):
-                print(sequence_no + i)
-                expected = binary_file.read(4)
-                if len(expected) == 0:
-                    return None
-                print(expected.hex())
-                expected = utils.calculate_crc32_dword(expected)
-
-                received = checksums[4 * i : 4 * i + 4]
-                
-                print("Received CRC32:", received.hex())
-                print("Expected CRC32:", hex(expected))
-                return
-                if expected != received:
-                    print("Checksum validation failed")
-
-        # everything checks out, returns True
-        print("Checksum validation successful")
-        return True
+        file_checksums.calc_checksum(sequence_no + no_of_checksum-1)
     except FileNotFoundError:
-        print(f"Error: Validating checksum failed because binary file not found" 
-              f"for packet_id '{packet_info.packet_id}' at path '{binary_path}'")
+        print(f"Checksum validation failed because the file at"
+                f"'{file_checksums.binary_path}' cannot be found.")
         return False
+
+    for i in range(0, no_of_checksum):
+        # calculate expected
+        expected = file_checksums.calc_checksum(sequence_no + i)
+
+        # calculated received
+        received = int.from_bytes(checksums[4 * i : 4 * i + 4])
+        
+        # print("Received CRC32:", hex(received))
+        # print("Expected CRC32:", hex(expected))
+        if expected != received:
+            is_success = False
+            with open("checksum_failures.log", "a") as log_file:
+                log_file.write(f"{hex(packet_info.packet_id)}\n"
+                            f"{packet_info.packet_sequence_no}\n"
+                            f"{packet_info.packet_sequence_no + i}\n"
+                            f"{hex(received)[2:]}\n"
+                            f"{hex(expected)[2:]}\n\n")
+            print("\tChecksum validation failed, check checksum_failures.log"
+                    " for more details")
+
+    if is_success:
+        print("\tChecksum validation successful")
+
+    # returns status 
+    return is_success
 
 def load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
     keys = {}
@@ -261,7 +288,7 @@ def load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
 
     return keys
 
-def load_binaries(binaries_dict: dict[str, str]) -> dict[int, bytes]:
+def load_binaries(binaries_dict: dict[str, str]) -> dict[int, FileChecksums]:
     binaries = {}
 
     for packet_id, binary_path in binaries_dict.items():
@@ -271,13 +298,14 @@ def load_binaries(binaries_dict: dict[str, str]) -> dict[int, bytes]:
         # Load the content of the key file
         try:
             with open(binary_path, 'rb'):
-                binaries[packet_id_int] = binary_path
+                binaries[packet_id_int] = FileChecksums(binary_path)
         except FileNotFoundError:
             # If not found, warn 
             print(f"Warning: Binary path not found for packet_id '{packet_id}'"
                   f" at path '{binary_path}'")
 
     return binaries
+
 
 def main():
     # Parser object to parse named args
