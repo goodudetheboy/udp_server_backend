@@ -1,3 +1,5 @@
+https://reveng.sourceforge.io/crc-catalogue/all.htm#crc.cat-bits.32
+
 00000042 # unique packet id
 
 00000000 # packet sequence number (total checksums processed)

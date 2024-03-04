@@ -95,7 +95,6 @@ def udp_server(server_config: ServerConfig):
 
             # Verify checksums
             result = verify_checksums(
-                data,
                 packet_info,
                 server_config.binaries[packet_info.packet_id]
             )
@@ -103,7 +102,8 @@ def udp_server(server_config: ServerConfig):
             if result is False:
                 print(f"Checksums validation failed for"
                       f" packet id 0x{packet_info.packet_id}.")
-
+            elif result is None:
+                return
             print()
             # Echo back the received data to the client
             server_socket.sendto(data, client_address)
@@ -143,7 +143,7 @@ def verify_integrity(data: bytes) -> PacketInfo | None:
 
     # rest of the part is valid, so pack into a PacketInfo and resend
     signature = data[-64:]
-    checksums_data = data[12:12 + no_of_checksum * 4]
+    checksums_data = data[12:-64]
     
     return PacketInfo(
         packet_id,
@@ -188,17 +188,15 @@ def verify_signature(
         print("\tSignature verification successful")
     else:
         with open("verification_failures.log", "a") as log_file:
-            log_file.write(f"{hex(packet_info.packet_id)}\n")
-            log_file.write(f"{packet_info.packet_sequence_no}\n")
-            log_file.write(f"{received}\n")
-            log_file.write(f"{expected}\n")
-            log_file.write("\n")
+            log_file.write(f"{hex(packet_info.packet_id)}\n"
+                           f"{packet_info.packet_sequence_no}\n"
+                           f"{received}\n"
+                           f"{expected}\n\n")
         print("\tSignature verification failed, check verification_failures.log"
                 " for more details")
 
 
 def verify_checksums(
-        data: bytes,
         packet_info: PacketInfo,
         binary_path: str
     ) -> bool:
@@ -208,23 +206,31 @@ def verify_checksums(
     
     # get data checksum, starting at bytes 12 and go all the way till the
     # digital signature
-    checksum_data = utils.xor_decrypt(data[12:-64], xor_key)
+    checksums = utils.xor_decrypt(packet_info.checksums_data, xor_key)
     
     try:
         with open(binary_path, 'rb') as binary_file:
+            binary_file.seek(1109 * 4)
+            fuck = (binary_file.read(11 * 4))
+            print(fuck.hex())
+            # print(hex(utils.calculate_crc32_dword(fuck)))
             binary_file.seek(sequence_no * 4)
+            # binary_file.seek(199989 * 4)
             # print(packet_info.no_of_checksum)
             # print(binary_file.read(packet_info.no_of_checksum * 4).hex())
             for i in range(0, no_of_checksum):
+                print(sequence_no + i)
                 expected = binary_file.read(4)
+                if len(expected) == 0:
+                    return None
                 print(expected.hex())
                 expected = utils.calculate_crc32_dword(expected)
 
-                received = checksum_data[4 * i : 4 * i + 4]
+                received = checksums[4 * i : 4 * i + 4]
                 
                 print("Received CRC32:", received.hex())
                 print("Expected CRC32:", hex(expected))
-
+                return
                 if expected != received:
                     print("Checksum validation failed")
 
