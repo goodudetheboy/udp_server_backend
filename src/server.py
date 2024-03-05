@@ -6,6 +6,7 @@ import utils
 import zlib
 import queue
 import threading
+import logging
 
 METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
 
