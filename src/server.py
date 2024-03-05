@@ -254,8 +254,9 @@ def verify_signature(
                         f"{packet_info.packet_sequence_no}\n"
                         f"{received}\n"
                         f"{expected}\n\n")
-        logging.error("Digital signature validation failed for packet id"
-                     f" {hex(packet_info.packet_id)}.")
+        logging.error("Digital signature validation failed for packet_id"
+                     f" {hex(packet_info.packet_id)}, sequence number"
+                     f" {packet_info.packet_sequence_no}.")
 
 
 def verify_checksums(
