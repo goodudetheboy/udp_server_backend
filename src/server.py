@@ -1,10 +1,11 @@
-import itertools
+import random
 import socket
 import argparse # for parsing arguments
 import ast # args parsing support for dict conversion 
 import utils
 import zlib
-import fastcrc
+import queue
+import threading
 
 METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
 
@@ -77,10 +78,33 @@ class ServerConfig:
         self.binaries = binaries
         self.delay = delay
 
+def worker_thread(
+        packet_id: int,
+        work_queue: queue.Queue[(bytes, PacketInfo)],
+        public_key: bytes,
+        file_checksums: FileChecksums
+    ):
+    while True:
+        data, packet_info = work_queue.get(block=True)
+        print(packet_info.get_info())
+
+        # Verify digital signature
+        result = verify_signature(data, packet_info, public_key)
+        if result is False:
+            print(f"Digital signature validation failed for packet id {hex(packet_id)}.")
+
+        # Verify checksums
+        result = verify_checksums(packet_info, file_checksums)
+        if result is False:
+            print(f"Checksums validation failed for packet id {hex(packet_id)}")
+        print()
+
 def udp_server(server_config: ServerConfig):
 
     host = server_config.host
     port = server_config.port
+
+    workers_queue: dict[int, (bytes, queue.Queue[PacketInfo])] = {}
 
     # Create a UDP socket
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_socket:
@@ -90,7 +114,7 @@ def udp_server(server_config: ServerConfig):
 
         while True:
             # Receive data and address from client
-            data, client_address = server_socket.recvfrom(2048)
+            data, _ = server_socket.recvfrom(2048)
             
             # Verify structural integrity of data
             packet_info = verify_integrity(data)
@@ -98,41 +122,40 @@ def udp_server(server_config: ServerConfig):
                 print(f"Data received is invalid.")
                 continue
             
-            # if packet_info.packet_sequence_no != 1109:
-            #     continue
-            print(packet_info.get_info())
+            # If packets are valid, then we validate next 
+            packet_id = packet_info.packet_id
+
+            # TOREMOVE
+            packet_id = random.randint(packet_id, packet_id + 4)
+            packet_info.packet_id = packet_id
 
             # Check if have packet_id in keychain
-            if packet_info.packet_id not in server_config.keys:
+            if packet_id not in server_config.keys:
                 print(f"No key provided for packet id"
                       f" 0x{hex(packet_info.packet_id)}")
                 continue
+            
+            # Put packet to the worker handling the verifying packets with
+            # specific packet_id
+            if packet_id not in workers_queue:
+                worker_queue = queue.Queue()
+                workers_queue[packet_id] = worker_queue
+                worker_thread_instance = threading.Thread(
+                    target=worker_thread,
+                    args=(
+                        packet_id,
+                        worker_queue,
+                        server_config.keys[packet_id],
+                        server_config.binaries[packet_id]
+                        # key,
+                        # file_checksums
+                    )
+                )
+                worker_thread_instance.start()
 
-            # Verify digital signature
-            result = verify_signature(
-                data,
-                packet_info,
-                server_config.keys[packet_info.packet_id]
-            )
+            workers_queue[packet_id].put((data, packet_info))
 
-            if result is False:
-                print(f"Digital signature validation failed for"
-                      f" packet id 0x{packet_info.packet_id}.")
-
-            # Verify checksums
-            result = verify_checksums(
-                packet_info,
-                server_config.binaries[packet_info.packet_id]
-            )
-
-            if result is False:
-                print(f"Checksums validation failed for"
-                      f" packet id 0x{packet_info.packet_id}.")
-            elif result is None:
-                return
-            print()
             # Echo back the received data to the client
-            server_socket.sendto(data, client_address)
 
 def verify_integrity(data: bytes) -> PacketInfo | None:   
     """

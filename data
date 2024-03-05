@@ -63,3 +63,6 @@ cded9ac2
 1e8f1b39
 f315ab43
 3acbf725
+
+
+python server.py --keys '{"0x42": "key.bin", "0x43": "key.bin","0x44": "key.bin","0x45": "key.bin","0x46": "key.bin"}' --binaries '{"0x42": "cat.jpg","0x43": "cat.jpg","0x44": "cat.jpg","0x45": "cat.jpg","0x46": "cat.jpg"}' -d '0' -p '1337'
