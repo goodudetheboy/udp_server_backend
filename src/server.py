@@ -9,19 +9,23 @@ import threading
 import logging
 
 METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
+VERIF_FAILURES_LOG_PATH = "verification_failures.log"
+CKSUMS_FAILURE_LOG_PATH = "checksum_failures.log"
 
-logging.basicConfig(level=logging.INFO, encoding='utf-8')
+logging.basicConfig(
+    level=logging.INFO,
+    encoding='utf-8',
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
 # set up thread-safe logging for verifications
-verif_handler = logging.FileHandler("verification_failures.log")
-# verif_handler.setFormatter(logging.Formatter('%(message)s'))
-verif_logger = logging.getLogger("verification_failures.log")
+verif_handler = logging.FileHandler(VERIF_FAILURES_LOG_PATH)
+verif_logger = logging.getLogger("verification")
 verif_logger.addHandler(verif_handler)
 
 # set up thread-safe logging for checksums
-cksum_handler = logging.FileHandler("checksum_failures.log")
-cksum_handler.setFormatter(logging.Formatter('%(message)s'))
-cksum_logger = logging.getLogger("checksum_failures.log")
+cksum_handler = logging.FileHandler(CKSUMS_FAILURE_LOG_PATH)
+cksum_logger = logging.getLogger("checksum")
 cksum_logger.addHandler(cksum_handler)
 
 
@@ -107,12 +111,12 @@ def worker_thread(
         # Verify digital signature
         result = verify_signature(data, packet_info, public_key)
         if result is False:
-            print(f"Digital signature validation failed for packet id {hex(packet_id)}.")
+            continue
 
         # Verify checksums
         result = verify_checksums(packet_info, file_checksums)
         if result is False:
-            print(f"Checksums validation failed for packet id {hex(packet_id)}")
+            continue
         # print()
 
 def udp_server(server_config: ServerConfig):
@@ -126,7 +130,7 @@ def udp_server(server_config: ServerConfig):
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_socket:
         # Bind the socket to a specific address and port
         server_socket.bind((host, port))
-        print(f"UDP server listening on {host}:{port}")
+        logging.info(f"UDP server listening on {host}:{port}")
 
         while True:
             # Receive data and address from client
@@ -249,16 +253,13 @@ def verify_signature(
     
     result, received, expected = utils.verify_rsa_signature(data, signature, modulus, exponent)
 
-    # if result is True:
-    #     # print("\tSignature verification successful")
-    # else:
     if result is False:
         verif_logger.debug(f"{hex(packet_info.packet_id)}\n"
                         f"{packet_info.packet_sequence_no}\n"
                         f"{received}\n"
                         f"{expected}\n\n")
-        print("\tSignature verification failed, check verification_failures.log"
-                " for more details")
+        logging.error("Digital signature validation failed for packet id"
+                     f" {hex(packet_info.packet_id)}.")
 
 
 def verify_checksums(
@@ -278,7 +279,7 @@ def verify_checksums(
     try:
         file_checksums.calc_checksum(sequence_no + no_of_checksum-1)
     except FileNotFoundError:
-        print(f"Checksum validation failed because the file at"
+        logging.warning(f"Checksum validation failed because the file at"
                 f"'{file_checksums.binary_path}' cannot be found.")
         return False
 
@@ -289,10 +290,6 @@ def verify_checksums(
         # calculated received
         received = int.from_bytes(checksums[4 * i : 4 * i + 4])
         
-        if sequence_no == 17054:
-            print("Iteration:", sequence_no + i)
-            print("Received CRC32:", hex(received))
-            print("Expected CRC32:", hex(expected))
         if expected != received:
             is_success = False
             cksum_logger.debug(f"{hex(packet_info.packet_id)}\n"
@@ -300,8 +297,9 @@ def verify_checksums(
                             f"{packet_info.packet_sequence_no + i}\n"
                             f"{hex(received)[2:]}\n"
                             f"{hex(expected)[2:]}\n\n")
-            # print("\tChecksum validation failed, check checksum_failures.log"
-                    # " for more details")
+            logging.error("Checksum validation failed for packet_id"
+                         f" {hex(packet_info.packet_id)}, cyclic iteration"
+                         f" {sequence_no + i}.")
 
     # if is_success:
         # print("\tChecksum validation successful")
@@ -323,7 +321,7 @@ def load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
             keys[packet_id_int] = key_content
         except FileNotFoundError:
             # If not found, warn 
-            print(f"Warning: Key not found for packet_id '{packet_id}' at path"
+            logging.warning(f"Key not found for packet_id '{packet_id}' at path"
                   f" '{key_path}'")
 
     return keys
@@ -341,7 +339,7 @@ def load_binaries(binaries_dict: dict[str, str]) -> dict[int, FileChecksums]:
                 binaries[packet_id_int] = FileChecksums(binary_path)
         except FileNotFoundError:
             # If not found, warn 
-            print(f"Warning: Binary path not found for packet_id '{packet_id}'"
+            logging.warning(f"Binary file path not found for packet_id '{packet_id}'"
                   f" at path '{binary_path}'")
 
     return binaries
