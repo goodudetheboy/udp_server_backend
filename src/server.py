@@ -106,7 +106,6 @@ def worker_thread(
     ):
     while True:
         data, packet_info = work_queue.get(block=True)
-        # print(packet_info.get_info())
 
         # Verify digital signature
         result = verify_signature(data, packet_info, public_key)
@@ -117,7 +116,6 @@ def worker_thread(
         result = verify_checksums(packet_info, file_checksums)
         if result is False:
             continue
-        # print()
 
 def udp_server(server_config: ServerConfig):
 
@@ -139,7 +137,7 @@ def udp_server(server_config: ServerConfig):
             # Verify structural integrity of data
             packet_info = verify_integrity(data)
             if packet_info is None:
-                print(f"Data received is invalid.")
+                logging.error(f"Incoming packet has invalid format.")
                 continue
             
             # If packets are valid, then we validate next 
@@ -151,8 +149,8 @@ def udp_server(server_config: ServerConfig):
 
             # Check if have packet_id in keychain
             if packet_id not in server_config.keys:
-                print(f"No key provided for packet id"
-                      f" 0x{hex(packet_info.packet_id)}")
+                logging.error(f"No key provided for packet_id"
+                              f" {hex(packet_info.packet_id)}")
                 continue
             
             # Put packet to the worker handling the verifying packets with
@@ -167,8 +165,6 @@ def udp_server(server_config: ServerConfig):
                         worker_queue,
                         server_config.keys[packet_id],
                         server_config.binaries[packet_id]
-                        # key,
-                        # file_checksums
                     )
                 )
                 worker_thread_instance.start()
@@ -240,7 +236,7 @@ def verify_signature(
 
     Args:
         data (bytes): data from this packet, including the digital signature
-        packet_info (PacketInfo): info extracted from this package
+        packet_info (PacketInfo): info extracted from this packet
         public_key (bytes): Public key for the digital signature
     
     Returns:
@@ -266,6 +262,17 @@ def verify_checksums(
         packet_info: PacketInfo,
         file_checksums: FileChecksums
     ) -> bool:
+    """
+    Verify that the incoming XOR'd Cyclic Checksum CRC32 DWORDS are valid.
+
+    Args:
+        packet_info (PacketInfo): info extracted from this packet
+        file_checksums (FileChecksums): object containing the previously
+            calculated checksums of a given file
+    
+    Returns:
+        bool: True if the verification is valid, False otherwise.
+    """
     sequence_no = packet_info.packet_sequence_no
     xor_key = packet_info.xor_key
     no_of_checksum = packet_info.no_of_checksum
@@ -300,9 +307,6 @@ def verify_checksums(
             logging.error("Checksum validation failed for packet_id"
                          f" {hex(packet_info.packet_id)}, cyclic iteration"
                          f" {sequence_no + i}.")
-
-    # if is_success:
-        # print("\tChecksum validation successful")
 
     # returns status 
     return is_success
@@ -339,8 +343,8 @@ def load_binaries(binaries_dict: dict[str, str]) -> dict[int, FileChecksums]:
                 binaries[packet_id_int] = FileChecksums(binary_path)
         except FileNotFoundError:
             # If not found, warn 
-            logging.warning(f"Binary file path not found for packet_id '{packet_id}'"
-                  f" at path '{binary_path}'")
+            logging.warning(f"Binary file path not found for packet_id"
+                  f" {packet_id} at path '{binary_path}'")
 
     return binaries
 def main():

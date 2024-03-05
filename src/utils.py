@@ -82,21 +82,3 @@ def xor_decrypt(data: bytes, key: bytes):
         decrypted_data.append(byte ^ key[i % key_length])
 
     return bytes(decrypted_data)
-
-def calculate_crc32_dword(dword: bytes):
-    # Calculate the CRC32 checksum for the single DWORD
-    # print("cur dword ", data_dword.hex())
-    # crc32_checksum = binascii.crc32(data_dword, 0xFFFFFFFF)
-    crc32_checksum = zlib.crc32(dword)
-    return crc32_checksum
-
-
-def get_file_size(file_path):
-    try:
-        # Get the size of the file in bytes
-        file_size = os.path.getsize(file_path)
-        return file_size
-
-    except FileNotFoundError:
-        print(f"Error: File '{file_path}' not found.")
-        return None
