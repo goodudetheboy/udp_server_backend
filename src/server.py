@@ -10,6 +10,21 @@ import logging
 
 METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
 
+logging.basicConfig(level=logging.INFO, encoding='utf-8')
+
+# set up thread-safe logging for verifications
+verif_handler = logging.FileHandler("verification_failures.log")
+# verif_handler.setFormatter(logging.Formatter('%(message)s'))
+verif_logger = logging.getLogger("verification_failures.log")
+verif_logger.addHandler(verif_handler)
+
+# set up thread-safe logging for checksums
+cksum_handler = logging.FileHandler("checksum_failures.log")
+cksum_handler.setFormatter(logging.Formatter('%(message)s'))
+cksum_logger = logging.getLogger("checksum_failures.log")
+cksum_logger.addHandler(cksum_handler)
+
+
 class PacketInfo:
     def __init__(
             self,
@@ -87,7 +102,7 @@ def worker_thread(
     ):
     while True:
         data, packet_info = work_queue.get(block=True)
-        print(packet_info.get_info())
+        # print(packet_info.get_info())
 
         # Verify digital signature
         result = verify_signature(data, packet_info, public_key)
@@ -98,7 +113,7 @@ def worker_thread(
         result = verify_checksums(packet_info, file_checksums)
         if result is False:
             print(f"Checksums validation failed for packet id {hex(packet_id)}")
-        print()
+        # print()
 
 def udp_server(server_config: ServerConfig):
 
@@ -234,14 +249,14 @@ def verify_signature(
     
     result, received, expected = utils.verify_rsa_signature(data, signature, modulus, exponent)
 
-    if result is True:
-        print("\tSignature verification successful")
-    else:
-        with open("verification_failures.log", "a") as log_file:
-            log_file.write(f"{hex(packet_info.packet_id)}\n"
-                           f"{packet_info.packet_sequence_no}\n"
-                           f"{received}\n"
-                           f"{expected}\n\n")
+    # if result is True:
+    #     # print("\tSignature verification successful")
+    # else:
+    if result is False:
+        verif_logger.debug(f"{hex(packet_info.packet_id)}\n"
+                        f"{packet_info.packet_sequence_no}\n"
+                        f"{received}\n"
+                        f"{expected}\n\n")
         print("\tSignature verification failed, check verification_failures.log"
                 " for more details")
 
@@ -274,21 +289,22 @@ def verify_checksums(
         # calculated received
         received = int.from_bytes(checksums[4 * i : 4 * i + 4])
         
-        # print("Received CRC32:", hex(received))
-        # print("Expected CRC32:", hex(expected))
+        if sequence_no == 17054:
+            print("Iteration:", sequence_no + i)
+            print("Received CRC32:", hex(received))
+            print("Expected CRC32:", hex(expected))
         if expected != received:
             is_success = False
-            with open("checksum_failures.log", "a") as log_file:
-                log_file.write(f"{hex(packet_info.packet_id)}\n"
+            cksum_logger.debug(f"{hex(packet_info.packet_id)}\n"
                             f"{packet_info.packet_sequence_no}\n"
                             f"{packet_info.packet_sequence_no + i}\n"
                             f"{hex(received)[2:]}\n"
                             f"{hex(expected)[2:]}\n\n")
-            print("\tChecksum validation failed, check checksum_failures.log"
-                    " for more details")
+            # print("\tChecksum validation failed, check checksum_failures.log"
+                    # " for more details")
 
-    if is_success:
-        print("\tChecksum validation successful")
+    # if is_success:
+        # print("\tChecksum validation successful")
 
     # returns status 
     return is_success
@@ -329,8 +345,6 @@ def load_binaries(binaries_dict: dict[str, str]) -> dict[int, FileChecksums]:
                   f" at path '{binary_path}'")
 
     return binaries
-
-
 def main():
     # Parser object to parse named args
     parser = argparse.ArgumentParser()
