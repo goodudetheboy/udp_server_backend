@@ -29,7 +29,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-exit_event = threading.Event()
 
 class PacketInfo:
     def __init__(
@@ -107,7 +106,8 @@ class ServerConfig:
             binaries: dict[int, FileChecksums],
             delay: float,
             verif_logger: logging.Logger,
-            cksum_logger: logging.Logger
+            cksum_logger: logging.Logger,
+            exit_event: threading.Event
         ):
         self.host = host
         self.port = port
@@ -116,6 +116,7 @@ class ServerConfig:
         self.delay = delay
         self.verif_logger = verif_logger
         self.cksum_logger = cksum_logger
+        self.exit_event = exit_event
 
 def worker_thread(
         packet_id: int,
@@ -140,7 +141,8 @@ def worker_thread(
         target=delayed_logger_thread,
         args=(
             packet_id,
-            log_queue
+            log_queue,
+            server_config
         )
     )
     logger_thread_instance.start()
@@ -150,7 +152,7 @@ def worker_thread(
     file_checksums = server_config.binaries[packet_id]
 
     # Keep running until terminated 
-    while not exit_event.is_set():
+    while not server_config.exit_event.is_set():
         # Fetch data from packet queue
         try:
             data, packet_info = work_queue.get(block=True, timeout=1)
@@ -184,7 +186,8 @@ def worker_thread(
 
 def delayed_logger_thread(
         packet_id: int,
-        log_queue: queue.Queue[LogRequest]
+        log_queue: queue.Queue[LogRequest],
+        server_config: ServerConfig
     ) -> None:
     """
     A thread for processing logging, with added delay function
@@ -195,7 +198,7 @@ def delayed_logger_thread(
 
     """
     logging.info(f"Logger processing packet_id {hex(packet_id)} starting up.")
-    while not exit_event.is_set():
+    while not server_config.exit_event.is_set():
         # Fetch data from packet queue
         try:
             log_req = log_queue.get(block=True, timeout=1)
@@ -275,7 +278,7 @@ def udp_server(server_config: ServerConfig):
         logging.info("Server terminated by user.")
     finally:
         # Kill all threads
-        exit_event.set()
+        server_config.exit_event.set()
         server_socket.close()
 
 def verify_integrity(data: bytes) -> PacketInfo | None:
@@ -498,18 +501,20 @@ def main():
     port = 1337 if args.port is None else args.port
 
 
-    # set up thread-safe logging for verifications
+    # Set up thread-safe logging for verifications
     verif_handler = logging.FileHandler(VERIF_FAILURES_LOG_PATH)
     verif_logger = logging.getLogger("verification")
     verif_logger.addHandler(verif_handler)
     verif_logger.propagate = False
 
-    # set up thread-safe logging for checksums
+    # Set up thread-safe logging for checksums
     cksum_handler = logging.FileHandler(CKSUMS_FAILURE_LOG_PATH)
     cksum_logger = logging.getLogger("checksum")
     cksum_logger.addHandler(cksum_handler)
     cksum_logger.propagate = False
 
+    # Exit event to stop threads
+    exit_event = threading.Event()
 
     server_config = ServerConfig(
         host,
@@ -518,7 +523,8 @@ def main():
         binaries_dict,
         delay,
         verif_logger,
-        cksum_logger
+        cksum_logger,
+        exit_event
     )
 
     # Start the UDP server
