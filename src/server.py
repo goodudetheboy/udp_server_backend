@@ -29,18 +29,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-# set up thread-safe logging for verifications
-verif_handler = logging.FileHandler(VERIF_FAILURES_LOG_PATH)
-verif_logger = logging.getLogger("verification")
-verif_logger.addHandler(verif_handler)
-verif_logger.propagate = False
-
-# set up thread-safe logging for checksums
-cksum_handler = logging.FileHandler(CKSUMS_FAILURE_LOG_PATH)
-cksum_logger = logging.getLogger("checksum")
-cksum_logger.addHandler(cksum_handler)
-cksum_logger.propagate = False
-
 exit_event = threading.Event()
 
 class PacketInfo:
@@ -117,13 +105,17 @@ class ServerConfig:
             port: int,
             keys: dict[int, bytes],
             binaries: dict[int, FileChecksums],
-            delay: float
+            delay: float,
+            verif_logger: logging.Logger,
+            cksum_logger: logging.Logger
         ):
         self.host = host
         self.port = port
         self.keys = keys
         self.binaries = binaries
         self.delay = delay
+        self.verif_logger = verif_logger
+        self.cksum_logger = cksum_logger
 
 def worker_thread(
         packet_id: int,
@@ -171,6 +163,7 @@ def worker_thread(
             packet_info,
             public_key,
             log_queue,
+            server_config,
             server_config.delay
         )
         if signature_result is False:
@@ -181,6 +174,7 @@ def worker_thread(
             packet_info,
             file_checksums,
             log_queue,
+            server_config,
             server_config.delay
         )
         if not checksums_result:
@@ -345,6 +339,7 @@ def verify_signature(
         packet_info: PacketInfo,
         public_key: bytes,
         log_queue: queue.Queue[LogRequest],
+        server_config: ServerConfig,
         delay: float = 0,
     ) -> bool:
     """
@@ -379,7 +374,7 @@ def verify_signature(
                f"{packet_info.packet_sequence_no}\n"
                f"{rec}\n"
                f"{exp}\n\n")
-        log_queue.put(LogRequest(log, delay, verif_logger))
+        log_queue.put(LogRequest(log, delay, server_config.verif_logger))
         logging.error("Digital signature validation failed for packet_id"
                      f" {hex(packet_info.packet_id)}, sequence number"
                      f" {packet_info.packet_sequence_no}.")
@@ -390,6 +385,7 @@ def verify_checksums(
         packet_info: PacketInfo,
         file_checksums: FileChecksums,
         log_queue: queue.Queue[LogRequest],
+        server_config: ServerConfig,
         delay: float = 0
     ) -> bool:
     """
@@ -434,7 +430,7 @@ def verify_checksums(
                    f"{packet_info.packet_sequence_no + i}\n"
                    f"{hex(received)[2:]}\n"
                    f"{hex(expected)[2:]}\n\n")
-            log_queue.put(LogRequest(log, delay, cksum_logger))
+            log_queue.put(LogRequest(log, delay, server_config.cksum_logger))
             logging.error("Checksum validation failed for packet_id"
                          f" {hex(packet_info.packet_id)}, cyclic iteration"
                          f" {sequence_no + i}.")
@@ -501,7 +497,29 @@ def main():
     delay = 0 if args.delay is None else args.delay
     port = 1337 if args.port is None else args.port
 
-    server_config = ServerConfig(host, port, keys_dict, binaries_dict, delay)
+
+    # set up thread-safe logging for verifications
+    verif_handler = logging.FileHandler(VERIF_FAILURES_LOG_PATH)
+    verif_logger = logging.getLogger("verification")
+    verif_logger.addHandler(verif_handler)
+    verif_logger.propagate = False
+
+    # set up thread-safe logging for checksums
+    cksum_handler = logging.FileHandler(CKSUMS_FAILURE_LOG_PATH)
+    cksum_logger = logging.getLogger("checksum")
+    cksum_logger.addHandler(cksum_handler)
+    cksum_logger.propagate = False
+
+
+    server_config = ServerConfig(
+        host,
+        port,
+        keys_dict,
+        binaries_dict,
+        delay,
+        verif_logger,
+        cksum_logger
+    )
 
     # Start the UDP server
     udp_server(server_config)
