@@ -80,7 +80,7 @@ class FileChecksums:
 
     def calc_checksum(self, iter: int) -> int:
         checksums = self.checksums
-        
+
         # check if input iteration are already calculated
         # if not then continue calculating
         if len(checksums) <= iter:
@@ -130,6 +130,16 @@ def worker_thread(
         work_queue: queue.Queue[(bytes, PacketInfo)],
         server_config: ServerConfig
     ) -> None:
+    """
+    A thread for processing digital signature and checksums validation. Will
+    spawn a logger thread for use when needed to log failures.
+
+    Args:
+        packet_id (int): packet_id that this logger is assigned to process
+        work_queue (queue.Queue[LogRequest]): queue to process packets
+        server_config (ServerConfig): config of the UDP server
+
+    """
     logging.info(f"Worker processing packet_id {hex(packet_id)} starting up.")
 
     log_queue = queue.Queue[LogRequest]()
@@ -155,6 +165,7 @@ def worker_thread(
         except queue.Empty:
             continue
 
+        # Verify digital signature
         signature_result = verify_signature(
             data,
             packet_info,
@@ -162,23 +173,33 @@ def worker_thread(
             log_queue,
             server_config.delay
         )
-        # Verify digital signature
         if signature_result is False:
             continue
             
+        # Verify checksums
         checksums_result = verify_checksums(
             packet_info,
             file_checksums,
             log_queue,
             server_config.delay
         )
-        # Verify checksums
         if not checksums_result:
             continue
     
     logging.info(f"Worker processing {packet_id} shutting down.")
 
-def delayed_logger_thread(packet_id: int, log_queue: queue.Queue[LogRequest]):
+def delayed_logger_thread(
+        packet_id: int,
+        log_queue: queue.Queue[LogRequest]
+    ) -> None:
+    """
+    A thread for processing logging, with added delay function
+
+    Args:
+        packet_id (int): packet_id that this logger is assigned to process
+        log_queue (queue.Queue[LogRequest]): queue to log
+
+    """
     logging.info(f"Logger processing packet_id {hex(packet_id)} starting up.")
     while not exit_event.is_set():
         # Fetch data from packet queue
@@ -263,7 +284,7 @@ def udp_server(server_config: ServerConfig):
         exit_event.set()
         server_socket.close()
 
-def verify_integrity(data: bytes) -> PacketInfo | None:   
+def verify_integrity(data: bytes) -> PacketInfo | None:
     """
     Verify the structural integrity of the given data packet as specified
     in the documentation. This first checks if the length of the given data
