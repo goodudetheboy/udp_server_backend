@@ -9,7 +9,13 @@ import threading
 import logging
 import asyncio
 
-METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
+PKT_ID_SIZE = 4
+PKT_SEQ_NO_SIZE = 4
+XOR_KEY_SIZE = 2
+NO_CKSUM_SIZE = 2
+SIGN_SIZE = 64
+HEADER_SIZE = PKT_ID_SIZE + PKT_SEQ_NO_SIZE + XOR_KEY_SIZE + NO_CKSUM_SIZE
+METADATA_SIZE = HEADER_SIZE + SIGN_SIZE
 VERIF_FAILURES_LOG_PATH = "verification_failures.log"
 CKSUMS_FAILURE_LOG_PATH = "checksum_failures.log"
 
@@ -105,7 +111,7 @@ def worker_thread(
         work_queue: queue.Queue[(bytes, PacketInfo)],
         public_key: bytes,
         file_checksums: FileChecksums
-    ):
+    ) -> None:
     logging.info(f"Worker processing packet_id {hex(packet_id)} starting up.")
     while not exit_event.is_set():
         try:
@@ -126,13 +132,8 @@ def worker_thread(
 
 def _recv(server_socket: socket.socket) -> bytes:
     buffer = b""
-    while True:
-        data = server_socket.recv(1024)
-        buffer += data
-
-        # Check if the packet is complete
-        if b"\0" in buffer:
-            break
+    data = server_socket.recv(4096)
+    buffer += data
     return buffer
 
 def udp_server(server_config: ServerConfig):
@@ -219,22 +220,32 @@ def verify_integrity(data: bytes) -> PacketInfo | None:
     """
 
     # Check that given input data has at least minimum size of metadata
-    if len(data) < METADATA_BYTE_SIZE:
+    if len(data) < METADATA_SIZE:
         return None
 
-    packet_id = int.from_bytes(data[0:4])
-    packet_sequence_no = int.from_bytes(data[4:8])
-    xor_key = data[8:10]
-    no_of_checksum = int.from_bytes(data[10:12])
+    # retrieve packet_id
+    packet_id = int.from_bytes(data[0 : PKT_ID_SIZE])
+    ptr = PKT_ID_SIZE
+
+    # retrieve packet sequence number
+    packet_sequence_no = int.from_bytes(data[ptr : ptr + PKT_SEQ_NO_SIZE])
+    ptr += PKT_SEQ_NO_SIZE
+
+    # retrieve xor key
+    xor_key = data[ptr : ptr + XOR_KEY_SIZE]
+    ptr +=  XOR_KEY_SIZE
+
+    # retrieve number of checksums
+    no_of_checksum = int.from_bytes(data[ptr : ptr + NO_CKSUM_SIZE])
 
     # length of no checksum plus len of metadata must match length of input
     # byte array, aka no_of_checksum * 4 + METADATA_BYTE_SIZE == len(data)
-    if no_of_checksum * 4 + METADATA_BYTE_SIZE != len(data):
+    if no_of_checksum * 4 + METADATA_SIZE != len(data):
         return None
 
     # rest of the part is valid, so pack into a PacketInfo and resend
-    signature = data[-64:]
-    checksums_data = data[12:-64]
+    signature = data[-SIGN_SIZE:]
+    checksums_data = data[HEADER_SIZE:-SIGN_SIZE]
     
     return PacketInfo(
         packet_id,
