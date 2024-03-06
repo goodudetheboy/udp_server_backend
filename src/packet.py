@@ -9,7 +9,6 @@ HEADER_SIZE = PKT_ID_SIZE + PKT_SEQ_NO_SIZE + XOR_KEY_SIZE + NO_CKSUM_SIZE
 METADATA_SIZE = HEADER_SIZE + SIGNATURE_SIZE
 
 
-
 class PacketInfo:
     def __init__(
             self,
