@@ -1,8 +1,4 @@
 import utils
-import logging
-import queue
-import zlib
-from logger import LogRequest
 
 PKT_ID_SIZE = 4
 PKT_SEQ_NO_SIZE = 4
@@ -12,8 +8,6 @@ SIGNATURE_SIZE = 64
 HEADER_SIZE = PKT_ID_SIZE + PKT_SEQ_NO_SIZE + XOR_KEY_SIZE + NO_CKSUM_SIZE
 METADATA_SIZE = HEADER_SIZE + SIGNATURE_SIZE
 
-MODULUS_SIZE = 64
-EXPONENT_SIZE = 3
 
 
 class PacketInfo:
@@ -100,50 +94,3 @@ def verify_integrity(data: bytes) -> PacketInfo | None:
         signature,
         checksums_data
     )
-
-def verify_signature(
-        data: bytes,
-        packet_info: PacketInfo,
-        public_key: bytes,
-        log_queue: queue.Queue[LogRequest],
-        verif_logger: logging.Logger,
-        delay: float = 0,
-    ) -> bool:
-    """
-    Verify that the RSA 512 SHA-256 digital signature provided in the packet
-    is correct. If it is not, the error will be logged to the file
-    verification_failures.log in the format:
-        (packet id - in hex)
-        (packet sequence number)
-        (received hash)
-        (expected hash)
-        (trailing newline)
-
-    Args:
-        data (bytes): data from this packet, including the digital signature
-        packet_info (PacketInfo): info extracted from this packet
-        public_key (bytes): Public key for the digital signature
-    
-    Returns:
-        bool: True if the verification is valid, False otherwise.
-    """
-    data = data[:-SIGNATURE_SIZE]
-    signature = packet_info.signature
-    modulus = int.from_bytes(public_key[-MODULUS_SIZE:])
-    exponent = int.from_bytes(public_key[:EXPONENT_SIZE])
-    
-    # Verify rsa signature and get back result, received, and expected for
-    # logging
-    res, rec, exp = utils.verify_rsa_signature(data, signature, modulus, exponent)
-
-    if res is False:
-        log = (f"{hex(packet_info.packet_id)}\n"
-               f"{packet_info.packet_sequence_no}\n"
-               f"{rec}\n"
-               f"{exp}\n\n")
-        log_queue.put(LogRequest(log, delay, verif_logger))
-        logging.error("Digital signature validation failed for packet_id"
-                     f" {hex(packet_info.packet_id)}, sequence number"
-                     f" {packet_info.packet_sequence_no}.")
-
-    return res

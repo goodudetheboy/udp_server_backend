@@ -7,9 +7,10 @@ import zlib
 import queue
 import threading
 import logging
-from logger import *
-from packet import *
-from checksums import *
+from logger import LogRequest, delayed_logger_thread
+from packet import PacketInfo, verify_integrity
+from checksums import FileChecksums, verify_checksums
+from signature import verify_signature
 
 
 VERIF_FAILURES_LOG_PATH = "verification_failures.log"
