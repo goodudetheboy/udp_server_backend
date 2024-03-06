@@ -21,7 +21,7 @@ for payload in payloads:
     sock.sendto(payload, ('127.0.0.1', 1337))
     time.sleep(0.001)
 
-time.sleep(1)
+time.sleep(2)
 
 with open(VERIFICATION_LOG, 'r') as v, open(CHECKSUM_LOG, 'r') as c:
     verification_failures = v.read()

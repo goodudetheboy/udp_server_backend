@@ -49,7 +49,7 @@ def verify_signature(
         log = (f"{hex(packet_info.packet_id)}\n"
                f"{packet_info.packet_sequence_no}\n"
                f"{rec}\n"
-               f"{exp}\n\n")
+               f"{exp}\n")
         log_queue.put(LogRequest(log, delay, verif_logger))
         # logging.error("Digital signature validation failed for packet_id"
         #              f" {hex(packet_info.packet_id)}, sequence number"

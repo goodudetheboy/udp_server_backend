@@ -77,7 +77,7 @@ def verify_checksums(
                    f"{packet_info.packet_sequence_no}\n"
                    f"{packet_info.packet_sequence_no + i}\n"
                    f"{hex(received)[2:]}\n"
-                   f"{hex(expected)[2:]}\n\n")
+                   f"{hex(expected)[2:]}\n")
             log_queue.put(LogRequest(log, delay, cksum_logger))
             # logging.error("Checksum validation failed for packet_id"
             #              f" {hex(packet_info.packet_id)}, cyclic iteration"
