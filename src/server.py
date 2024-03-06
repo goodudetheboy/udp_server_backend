@@ -33,11 +33,13 @@ logging.basicConfig(
 verif_handler = logging.FileHandler(VERIF_FAILURES_LOG_PATH)
 verif_logger = logging.getLogger("verification")
 verif_logger.addHandler(verif_handler)
+verif_logger.propagate = False
 
 # set up thread-safe logging for checksums
 cksum_handler = logging.FileHandler(CKSUMS_FAILURE_LOG_PATH)
 cksum_logger = logging.getLogger("checksum")
 cksum_logger.addHandler(cksum_handler)
+cksum_logger.propagate = False
 
 exit_event = threading.Event()
 
@@ -152,14 +154,26 @@ def worker_thread(
             data, packet_info = work_queue.get(block=True, timeout=1)
         except queue.Empty:
             continue
-        
-        result = verify_signature(data, packet_info, public_key, log_queue, server_config.delay)
+
+        signature_result = verify_signature(
+            data,
+            packet_info,
+            public_key,
+            log_queue,
+            server_config.delay
+        )
         # Verify digital signature
-        if result is False:
+        if signature_result is False:
             continue
-        
+            
+        checksums_result = verify_checksums(
+            packet_info,
+            file_checksums,
+            log_queue,
+            server_config.delay
+        )
         # Verify checksums
-        if not verify_checksums(packet_info, file_checksums, log_queue, server_config.delay):
+        if not checksums_result:
             continue
     
     logging.info(f"Worker processing {packet_id} shutting down.")
@@ -174,6 +188,7 @@ def delayed_logger_thread(packet_id: int, log_queue: queue.Queue[LogRequest]):
             continue
         
         while log_req.log_msg() is False:
+            time.sleep(1)
             continue
         
     logging.info(f"Logger processing packet_id {hex(packet_id)} shutting down.")
