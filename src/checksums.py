@@ -53,7 +53,7 @@ def verify_checksums(
     
     # get data checksum, starting at bytes 12 and go all the way till the
     # digital signature
-    checksums = xor_decrypt(packet_info.checksums_data, xor_key)
+    checksums = _xor_decrypt(packet_info.checksums_data, xor_key)
     
     is_success = True
     # pre-calculate
@@ -79,14 +79,14 @@ def verify_checksums(
                    f"{hex(received)[2:]}\n"
                    f"{hex(expected)[2:]}\n\n")
             log_queue.put(LogRequest(log, delay, cksum_logger))
-            logging.error("Checksum validation failed for packet_id"
-                         f" {hex(packet_info.packet_id)}, cyclic iteration"
-                         f" {sequence_no + i}.")
+            # logging.error("Checksum validation failed for packet_id"
+            #              f" {hex(packet_info.packet_id)}, cyclic iteration"
+            #              f" {sequence_no + i}.")
 
     # returns status 
     return is_success
 
-def xor_decrypt(data: bytes, key: bytes):
+def _xor_decrypt(data: bytes, key: bytes):
     decrypted_data = bytearray()
     key_length = len(key)
 

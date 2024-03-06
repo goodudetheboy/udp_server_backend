@@ -1,9 +1,6 @@
-import random
 import socket
-import argparse # for parsing arguments
-import ast # args parsing support for dict conversion 
-import utils
-import zlib
+import argparse
+import ast
 import queue
 import threading
 import logging
@@ -143,10 +140,6 @@ def udp_server(server_config: ServerConfig):
                 # If packets are valid, then we validate next 
                 packet_id = packet_info.packet_id
 
-                # TOREMOVE
-                packet_id = random.randint(packet_id, packet_id + 4)
-                packet_info.packet_id = packet_id
-
                 # Check if have packet_id in keychain
                 if packet_id not in server_config.keys:
                     logging.error(f"No key provided for packet_id"
@@ -179,12 +172,12 @@ def udp_server(server_config: ServerConfig):
         server_socket.close()
 
 
-def load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
+def _load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
     keys = {}
 
     for packet_id, key_path in keys_dict.items():
         # Convert key_id to int
-        packet_id_int = utils.convert_packet_id_to_int(packet_id)
+        packet_id_int = int(packet_id, 16)
 
         # Load the content of the key file
         try:
@@ -198,12 +191,12 @@ def load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
 
     return keys
 
-def load_binaries(binaries_dict: dict[str, str]) -> dict[int, FileChecksums]:
+def _load_binaries(binaries_dict: dict[str, str]) -> dict[int, FileChecksums]:
     binaries = {}
 
     for packet_id, binary_path in binaries_dict.items():
         # Convert key_id to int
-        packet_id_int = utils.convert_packet_id_to_int(packet_id)
+        packet_id_int = int(packet_id, 16)
 
         # Load the content of the key file
         try:
@@ -232,9 +225,9 @@ def main():
     # Prepare config for UDP server
     host = "127.0.0.1"
     keys_dict = {} if args.keys is None else args.keys
-    keys_dict = load_keys(keys_dict) # sanitize keys
+    keys_dict = _load_keys(keys_dict) # sanitize keys
     binaries_dict = {} if args.binaries is None else args.binaries
-    binaries_dict = load_binaries(binaries_dict) # sanitize bins
+    binaries_dict = _load_binaries(binaries_dict) # sanitize bins
     delay = 0 if args.delay is None else args.delay
     port = 1337 if args.port is None else args.port
 
