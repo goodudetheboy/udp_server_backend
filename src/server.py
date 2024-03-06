@@ -124,6 +124,17 @@ def worker_thread(
     
     logging.info(f"Worker processing {packet_id} shutting down.")
 
+def _recv(server_socket: socket.socket) -> bytes:
+    buffer = b""
+    while True:
+        data = server_socket.recv(1024)
+        buffer += data
+
+        # Check if the packet is complete
+        if b"\0" in buffer:
+            break
+    return buffer
+
 def udp_server(server_config: ServerConfig):
 
     host = server_config.host
@@ -139,11 +150,12 @@ def udp_server(server_config: ServerConfig):
             logging.info(f"UDP server listening on {host}:{port}")
 
             while True:
-                # Receive data and address from client
-                data = server_socket.recv(4096)
-                
+                # Receive data and address from client, guarantee that packet
+                # are received fully
+                buffer = _recv(server_socket)
+
                 # Verify structural integrity of data
-                packet_info = verify_integrity(data)
+                packet_info = verify_integrity(buffer)
                 if packet_info is None:
                     logging.error(f"Incoming packet has invalid format.")
                     continue
@@ -177,7 +189,7 @@ def udp_server(server_config: ServerConfig):
                     )
                     worker_thread_instance.start()
 
-                workers_queue[packet_id].put((data, packet_info))
+                workers_queue[packet_id].put((buffer, packet_info))
 
                 # Echo back the received data to the client
     except KeyboardInterrupt:
