@@ -171,7 +171,6 @@ def udp_server(server_config: ServerConfig):
         server_config.exit_event.set()
         server_socket.close()
 
-
 def _load_keys(keys_dict: dict[str, str]) -> dict[int, bytes]:
     keys = {}
 
