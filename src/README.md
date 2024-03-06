@@ -29,10 +29,6 @@ able to handle delayed logging without blocking cylic checksums calcullation and
 validation. The details of this feature is specified in [Logger thread](#logger-thread)
 of the [Design](#design) section.
 
-### No external supporting packages
-This implementation requires no external libraries and packages. All the packages
-needed are native in 3.11.
-
 
 ## Prerequisites
 This package was implemented and tested extensively in **Python 3.11.8**.
@@ -45,7 +41,12 @@ This package is run through the command line.
 cd <project's directory>
 ```
 
-2) Command line arguments
+2) Install packages
+```
+pip install -r requirements.txt
+```
+
+3) Command line arguments
 The main entry point for this server is `server.py`.
 
 - `--keys`: a dictionary of `{packet_id: key_file_path}` mappings
