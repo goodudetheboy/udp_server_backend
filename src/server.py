@@ -9,6 +9,7 @@ import threading
 import logging
 from logger import *
 from packet import *
+from checksums import *
 
 
 VERIF_FAILURES_LOG_PATH = "verification_failures.log"
