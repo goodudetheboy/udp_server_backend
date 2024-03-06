@@ -7,6 +7,7 @@ import zlib
 import queue
 import threading
 import logging
+import asyncio
 
 METADATA_BYTE_SIZE = 4 + 4 + 4 + 64
 VERIF_FAILURES_LOG_PATH = "verification_failures.log"
@@ -28,6 +29,7 @@ cksum_handler = logging.FileHandler(CKSUMS_FAILURE_LOG_PATH)
 cksum_logger = logging.getLogger("checksum")
 cksum_logger.addHandler(cksum_handler)
 
+exit_event = threading.Event()
 
 class PacketInfo:
     def __init__(
@@ -104,9 +106,12 @@ def worker_thread(
         public_key: bytes,
         file_checksums: FileChecksums
     ):
-    while True:
-        data, packet_info = work_queue.get(block=True)
-
+    logging.info(f"Worker processing packet_id {hex(packet_id)} starting up.")
+    while not exit_event.is_set():
+        try:
+            data, packet_info = work_queue.get(block=True, timeout=1)
+        except queue.Empty:
+            continue
         # Verify digital signature
         result = verify_signature(data, packet_info, public_key)
         if result is False:
@@ -116,6 +121,8 @@ def worker_thread(
         result = verify_checksums(packet_info, file_checksums)
         if result is False:
             continue
+    
+    logging.info(f"Worker processing {packet_id} shutting down.")
 
 def udp_server(server_config: ServerConfig):
 
@@ -124,54 +131,61 @@ def udp_server(server_config: ServerConfig):
 
     workers_queue: dict[int, (bytes, queue.Queue[PacketInfo])] = {}
 
-    # Create a UDP socket
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_socket:
-        # Bind the socket to a specific address and port
-        server_socket.bind((host, port))
-        logging.info(f"UDP server listening on {host}:{port}")
+    try:
+        # Create a UDP socket
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_socket:
+            # Bind the socket to a specific address and port
+            server_socket.bind((host, port))
+            logging.info(f"UDP server listening on {host}:{port}")
 
-        while True:
-            # Receive data and address from client
-            data, _ = server_socket.recvfrom(2048)
-            
-            # Verify structural integrity of data
-            packet_info = verify_integrity(data)
-            if packet_info is None:
-                logging.error(f"Incoming packet has invalid format.")
-                continue
-            
-            # If packets are valid, then we validate next 
-            packet_id = packet_info.packet_id
+            while True:
+                # Receive data and address from client
+                data = server_socket.recv(4096)
+                
+                # Verify structural integrity of data
+                packet_info = verify_integrity(data)
+                if packet_info is None:
+                    logging.error(f"Incoming packet has invalid format.")
+                    continue
+                
+                # If packets are valid, then we validate next 
+                packet_id = packet_info.packet_id
 
-            # TOREMOVE
-            packet_id = random.randint(packet_id, packet_id + 4)
-            packet_info.packet_id = packet_id
+                # TOREMOVE
+                packet_id = random.randint(packet_id, packet_id + 4)
+                packet_info.packet_id = packet_id
 
-            # Check if have packet_id in keychain
-            if packet_id not in server_config.keys:
-                logging.error(f"No key provided for packet_id"
-                              f" {hex(packet_info.packet_id)}")
-                continue
-            
-            # Put packet to the worker handling the verifying packets with
-            # specific packet_id
-            if packet_id not in workers_queue:
-                worker_queue = queue.Queue()
-                workers_queue[packet_id] = worker_queue
-                worker_thread_instance = threading.Thread(
-                    target=worker_thread,
-                    args=(
-                        packet_id,
-                        worker_queue,
-                        server_config.keys[packet_id],
-                        server_config.binaries[packet_id]
+                # Check if have packet_id in keychain
+                if packet_id not in server_config.keys:
+                    logging.error(f"No key provided for packet_id"
+                                f" {hex(packet_info.packet_id)}")
+                    continue
+                
+                # Put packet to the worker handling the verifying packets with
+                # specific packet_id
+                if packet_id not in workers_queue:
+                    worker_queue = queue.Queue()
+                    workers_queue[packet_id] = worker_queue
+                    worker_thread_instance = threading.Thread(
+                        target=worker_thread,
+                        args=(
+                            packet_id,
+                            worker_queue,
+                            server_config.keys[packet_id],
+                            server_config.binaries[packet_id]
+                        )
                     )
-                )
-                worker_thread_instance.start()
+                    worker_thread_instance.start()
 
-            workers_queue[packet_id].put((data, packet_info))
+                workers_queue[packet_id].put((data, packet_info))
 
-            # Echo back the received data to the client
+                # Echo back the received data to the client
+    except KeyboardInterrupt:
+        logging.info("Server terminated by user.")
+    finally:
+        # Kill all threads
+        exit_event.set()
+        server_socket.close()
 
 def verify_integrity(data: bytes) -> PacketInfo | None:   
     """
