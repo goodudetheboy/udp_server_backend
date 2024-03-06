@@ -1,15 +1,32 @@
-import zlib
+import logging
+import asyncio
 
-def calculate_crc32(file_path, iterations=200000, chunk_size=8192):
-    crc32_result = 0
+# Configure the logging module
+logging.basicConfig(level=logging.INFO)
 
-    with open(file_path, 'rb') as file:
-        for i in range(iterations):
-            print("iter", i)
-            chunk = file.read()
-            if not chunk:
-                file.seek(0)  # Reset file position to the beginning when reaching the end
-            crc32_result = zlib.crc32(chunk, crc32_result)
-    return crc32_result & 0xFFFFFFFF
+async def login_task(user):
+    # Introduce a 5-second delay asynchronously
+    await asyncio.sleep(5)    
+    logging.info(f"Logging in for {user}...")
 
-calculate_crc32('cat.jpg')
+async def data_processing_task(data):
+ 
+    # Introduce a 5-second delay asynchronously
+    await asyncio.sleep(5)   # Your asynchronous data processing code goes here
+    logging.info(f"Processing data: {data}")
+
+async def main():
+    # Create tasks for login and data processing asynchronously
+    login_task_instance = asyncio.create_task(login_task("user123"))
+    data_processing_task_instance = asyncio.create_task(data_processing_task("some_data"))
+
+
+    # Code here will run concurrently with login_task and data_processing_task
+    print("Code running concurrently with tasks")
+    return False
+
+# Run the main asynchronous function
+print(asyncio.create_task(data_processing_task("fadsf")))
+
+# Continue with the rest of your code
+print("Continuing with the rest of the code...")

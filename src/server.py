@@ -1,3 +1,4 @@
+import time
 import random
 import socket
 import argparse # for parsing arguments
@@ -7,15 +8,18 @@ import zlib
 import queue
 import threading
 import logging
-import asyncio
 
 PKT_ID_SIZE = 4
 PKT_SEQ_NO_SIZE = 4
 XOR_KEY_SIZE = 2
 NO_CKSUM_SIZE = 2
-SIGN_SIZE = 64
+SIGNATURE_SIZE = 64
 HEADER_SIZE = PKT_ID_SIZE + PKT_SEQ_NO_SIZE + XOR_KEY_SIZE + NO_CKSUM_SIZE
-METADATA_SIZE = HEADER_SIZE + SIGN_SIZE
+METADATA_SIZE = HEADER_SIZE + SIGNATURE_SIZE
+
+MODULUS_SIZE = 64
+EXPONENT_SIZE = 3
+
 VERIF_FAILURES_LOG_PATH = "verification_failures.log"
 CKSUMS_FAILURE_LOG_PATH = "checksum_failures.log"
 
@@ -91,6 +95,19 @@ class FileChecksums:
         
         return checksums[iter]
 
+class LogRequest:
+    def __init__(self, msg: str, delay: float, logger: logging.Logger):
+        self.msg = msg
+        self.logger = logger
+        self.scheduled_time = int(time.time()) + delay
+
+    def log_msg(self) -> bool:
+        if time.time() >= self.scheduled_time:
+            self.logger.warning(self.msg)
+            return True
+        else:
+            return False
+
 class ServerConfig:
     def __init__(
             self,
@@ -109,26 +126,58 @@ class ServerConfig:
 def worker_thread(
         packet_id: int,
         work_queue: queue.Queue[(bytes, PacketInfo)],
-        public_key: bytes,
-        file_checksums: FileChecksums
+        server_config: ServerConfig
     ) -> None:
     logging.info(f"Worker processing packet_id {hex(packet_id)} starting up.")
+
+    log_queue = queue.Queue[LogRequest]()
+    # Create logger thread
+    logger_thread_instance = threading.Thread(
+        target=delayed_logger_thread,
+        args=(
+            packet_id,
+            log_queue
+        )
+    )
+    logger_thread_instance.start()
+
+    # Load public key and file checksums for given packet_id
+    public_key = server_config.keys[packet_id]
+    file_checksums = server_config.binaries[packet_id]
+
+    # Keep running until terminated 
     while not exit_event.is_set():
+        # Fetch data from packet queue
         try:
             data, packet_info = work_queue.get(block=True, timeout=1)
         except queue.Empty:
             continue
+        
+        result = verify_signature(data, packet_info, public_key, log_queue, server_config.delay)
         # Verify digital signature
-        result = verify_signature(data, packet_info, public_key)
         if result is False:
             continue
-
+        
         # Verify checksums
-        result = verify_checksums(packet_info, file_checksums)
-        if result is False:
+        if not verify_checksums(packet_info, file_checksums, log_queue, server_config.delay):
             continue
     
     logging.info(f"Worker processing {packet_id} shutting down.")
+
+def delayed_logger_thread(packet_id: int, log_queue: queue.Queue[LogRequest]):
+    logging.info(f"Logger processing packet_id {hex(packet_id)} starting up.")
+    while not exit_event.is_set():
+        # Fetch data from packet queue
+        try:
+            log_req = log_queue.get(block=True, timeout=1)
+        except queue.Empty:
+            continue
+        
+        while log_req.log_msg() is False:
+            continue
+        
+    logging.info(f"Logger processing packet_id {hex(packet_id)} shutting down.")
+
 
 def _recv(server_socket: socket.socket) -> bytes:
     buffer = b""
@@ -184,8 +233,7 @@ def udp_server(server_config: ServerConfig):
                         args=(
                             packet_id,
                             worker_queue,
-                            server_config.keys[packet_id],
-                            server_config.binaries[packet_id]
+                            server_config
                         )
                     )
                     worker_thread_instance.start()
@@ -244,8 +292,8 @@ def verify_integrity(data: bytes) -> PacketInfo | None:
         return None
 
     # rest of the part is valid, so pack into a PacketInfo and resend
-    signature = data[-SIGN_SIZE:]
-    checksums_data = data[HEADER_SIZE:-SIGN_SIZE]
+    signature = data[-SIGNATURE_SIZE:]
+    checksums_data = data[HEADER_SIZE:-SIGNATURE_SIZE]
     
     return PacketInfo(
         packet_id,
@@ -259,7 +307,9 @@ def verify_integrity(data: bytes) -> PacketInfo | None:
 def verify_signature(
         data: bytes,
         packet_info: PacketInfo,
-        public_key: bytes
+        public_key: bytes,
+        log_queue: queue.Queue[LogRequest],
+        delay: float = 0,
     ) -> bool:
     """
     Verify that the RSA 512 SHA-256 digital signature provided in the packet
@@ -279,26 +329,32 @@ def verify_signature(
     Returns:
         bool: True if the verification is valid, False otherwise.
     """
-    data = data[:-64]
+    data = data[:-SIGNATURE_SIZE]
     signature = packet_info.signature
-    modulus = int.from_bytes(public_key[-64:])
-    exponent = int.from_bytes(public_key[:3])
+    modulus = int.from_bytes(public_key[-MODULUS_SIZE:])
+    exponent = int.from_bytes(public_key[:EXPONENT_SIZE])
     
-    result, received, expected = utils.verify_rsa_signature(data, signature, modulus, exponent)
+    # Verify rsa signature and get back result, received, and expected for
+    # logging
+    res, rec, exp = utils.verify_rsa_signature(data, signature, modulus, exponent)
 
-    if result is False:
-        verif_logger.debug(f"{hex(packet_info.packet_id)}\n"
-                        f"{packet_info.packet_sequence_no}\n"
-                        f"{received}\n"
-                        f"{expected}\n\n")
+    if res is False:
+        log = (f"{hex(packet_info.packet_id)}\n"
+               f"{packet_info.packet_sequence_no}\n"
+               f"{rec}\n"
+               f"{exp}\n\n")
+        log_queue.put(LogRequest(log, delay, verif_logger))
         logging.error("Digital signature validation failed for packet_id"
                      f" {hex(packet_info.packet_id)}, sequence number"
                      f" {packet_info.packet_sequence_no}.")
 
+    return res
 
 def verify_checksums(
         packet_info: PacketInfo,
-        file_checksums: FileChecksums
+        file_checksums: FileChecksums,
+        log_queue: queue.Queue[LogRequest],
+        delay: float = 0
     ) -> bool:
     """
     Verify that the incoming XOR'd Cyclic Checksum CRC32 DWORDS are valid.
@@ -337,11 +393,12 @@ def verify_checksums(
         
         if expected != received:
             is_success = False
-            cksum_logger.debug(f"{hex(packet_info.packet_id)}\n"
-                            f"{packet_info.packet_sequence_no}\n"
-                            f"{packet_info.packet_sequence_no + i}\n"
-                            f"{hex(received)[2:]}\n"
-                            f"{hex(expected)[2:]}\n\n")
+            log = (f"{hex(packet_info.packet_id)}\n"
+                   f"{packet_info.packet_sequence_no}\n"
+                   f"{packet_info.packet_sequence_no + i}\n"
+                   f"{hex(received)[2:]}\n"
+                   f"{hex(expected)[2:]}\n\n")
+            log_queue.put(LogRequest(log, delay, cksum_logger))
             logging.error("Checksum validation failed for packet_id"
                          f" {hex(packet_info.packet_id)}, cyclic iteration"
                          f" {sequence_no + i}.")
@@ -385,6 +442,8 @@ def load_binaries(binaries_dict: dict[str, str]) -> dict[int, FileChecksums]:
                   f" {packet_id} at path '{binary_path}'")
 
     return binaries
+
+
 def main():
     # Parser object to parse named args
     parser = argparse.ArgumentParser()
