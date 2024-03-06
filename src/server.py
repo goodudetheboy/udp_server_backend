@@ -8,6 +8,7 @@ import zlib
 import queue
 import threading
 import logging
+from logger import *
 
 PKT_ID_SIZE = 4
 PKT_SEQ_NO_SIZE = 4
@@ -84,19 +85,6 @@ class FileChecksums:
         
         return checksums[iter]
 
-class LogRequest:
-    def __init__(self, msg: str, delay: float, logger: logging.Logger):
-        self.msg = msg
-        self.logger = logger
-        self.scheduled_time = int(time.time()) + delay
-
-    def log_msg(self) -> bool:
-        if time.time() >= self.scheduled_time:
-            self.logger.warning(self.msg)
-            return True
-        else:
-            return False
-
 class ServerConfig:
     def __init__(
             self,
@@ -142,7 +130,7 @@ def worker_thread(
         args=(
             packet_id,
             log_queue,
-            server_config
+            server_config.exit_event
         )
     )
     logger_thread_instance.start()
@@ -183,34 +171,6 @@ def worker_thread(
             continue
     
     logging.info(f"Worker processing {packet_id} shutting down.")
-
-def delayed_logger_thread(
-        packet_id: int,
-        log_queue: queue.Queue[LogRequest],
-        server_config: ServerConfig
-    ) -> None:
-    """
-    A thread for processing logging, with added delay function
-
-    Args:
-        packet_id (int): packet_id that this logger is assigned to process
-        log_queue (queue.Queue[LogRequest]): queue to log
-
-    """
-    logging.info(f"Logger processing packet_id {hex(packet_id)} starting up.")
-    while not server_config.exit_event.is_set():
-        # Fetch data from packet queue
-        try:
-            log_req = log_queue.get(block=True, timeout=1)
-        except queue.Empty:
-            continue
-        
-        while log_req.log_msg() is False:
-            time.sleep(1)
-            continue
-        
-    logging.info(f"Logger processing packet_id {hex(packet_id)} shutting down.")
-
 
 def _recv(server_socket: socket.socket) -> bytes:
     buffer = b""
