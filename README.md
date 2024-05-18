@@ -1,10 +1,8 @@
-# udp_packet_challenge by Vuong Ho
-### Red Balloon Security - Python Programming Interview Challenge ##
+# UDP Server - CRC32 Packet Processor
 
 ## Overall
-This package contains the implementation of a UDP server with features
-and specifications specifided in the Python Programming Interview Challenge
-by Red Balloon Security. It supports concurrent processing and validating
+This package contains the implementation of a UDP server. It supports concurrent
+processing and validating
 digital signature and repeating key XOR'd cyclic checksum CRC32 DWORDS of
 incoming UDP packet. The user can also specify a delay (in seconds) to the
 logging of validation failures to file.
