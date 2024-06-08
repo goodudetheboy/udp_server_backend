@@ -57,11 +57,29 @@ Example run:
   python server.py --keys '{"0x42": "key.bin"}' --binaries '{"0x42": "cat.jpg"}' -d '0' -p '1337'
 ```
 
-## Design
+
+## Packet Design
+```
+====================================================================
+( 4 bytes ) Unique Packet ID for the checksummed binary
+====================================================================
+( 4 bytes ) Packet Sequence # (Total Checksums Processed)
+====================================================================
+( 2 bytes ) Multibyte Repeating XOR Key | ( 2 bytes ) # of Checksums
+====================================================================
+( Variable ) Repeating key XOR'd Cyclic Checksum CRC32 DWORDs
+....
+....
+....
+====================================================================
+( 64 bytes ) RSA 512 SHA-256 Digital Signature (for above fields)
+====================================================================
+```
+
+## Server Design
 
 Here is the design diagram of the UDP server:
 ![design diagram](./img/system_diagram.png)
-
 ### Main thread
 
 Upon starting, the thread will preprocess the given public keys and binaries.
