@@ -58,7 +58,7 @@ Example run:
 ```
 
 
-## Packet Design
+## Packet Specifications
 ```
 ====================================================================
 ( 4 bytes ) Unique Packet ID for the checksummed binary
